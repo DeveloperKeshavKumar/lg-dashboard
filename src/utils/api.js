@@ -1,429 +1,566 @@
-// Frappe API Configuration and Utility Functions
-// DocType Mappings:
-// CRM Organization -> Customers
-// CRM Deal -> Opportunities  
-// CRM Contract -> Contracts
-// CRM Quotation -> Quotations
-// Region Master -> Regions
-// Region Branches -> Branches
+// Frappe v15 API Integration Utilities
 
-const FRAPPE_CONFIG = {
-    baseUrl: import.meta.env.VITE_FRAPPE_URL || 'http://localhost:8000',
-    apiKey: import.meta.env.VITE_API_KEY || '43c6724d09a2c5e',
-    apiSecret: import.meta.env.VITE_API_SECRET || '959df24d70059e4'
-};
+const FRAPPE_URL = import.meta.env.VITE_FRAPPE_URL || 'https://your-frappe-instance.com';
+const API_KEY = import.meta.env.VITE_API_KEY;
+const API_SECRET = import.meta.env.VITE_API_SECRET;
+const DEBUG = import.meta.env.VITE_DEBUG === 'true';
 
 /**
- * Generic function to fetch data from Frappe v15 API
- * @param {string} doctype - The Frappe doctype to query
- * @param {object} filters - Filters to apply to the query
- * @param {array} fields - Fields to return (default: all)
- * @param {object} options - Additional options (limit, order_by, etc.)
- * @returns {Promise<array>} - Array of documents
+ * Debug logger - only logs when DEBUG is true
  */
-export const fetchFrappeData = async (doctype, filters = {}, fields = ['*'], options = {}) => {
+function debugLog(message, data) {
+    if (DEBUG) {
+        console.log(`[Dashboard Debug] ${message}`, data);
+    }
+}
+
+/**
+ * Generic function to fetch data from Frappe
+ */
+export async function fetchFrappeData(doctype, fields = [], filters = {}, limit = 0) {
     const params = new URLSearchParams({
         fields: JSON.stringify(fields),
         filters: JSON.stringify(filters),
-        limit_page_length: options.limit || 999,
-        ...(options.order_by && { order_by: options.order_by })
     });
 
-    try {
-        const response = await fetch(
-            `${FRAPPE_CONFIG.baseUrl}/api/resource/${doctype}?${params}`,
-            {
-                headers: {
-                    'Authorization': `token ${FRAPPE_CONFIG.apiKey}:${FRAPPE_CONFIG.apiSecret}`,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-
-        if (!response.ok) {
-            throw new Error(`Frappe API Error: ${response.status} ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        return data.data || [];
-    } catch (error) {
-        console.error('Frappe API Error:', error);
-        throw error;
+    if (limit > 0) {
+        params.append('limit_page_length', limit);
+    } else {
+        // Fetch all records by setting a very high limit
+        params.append('limit_page_length', 99999);
     }
-};
+
+    const url = `${FRAPPE_URL}/api/resource/${doctype}?${params}`;
+
+    debugLog(`Fetching ${doctype}`, { url, filters, fields });
+
+    const response = await fetch(url, {
+        headers: {
+            'Authorization': `token ${API_KEY}:${API_SECRET}`,
+            'Content-Type': 'application/json',
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to fetch ${doctype}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const result = data.data || [];
+
+    debugLog(`Fetched ${doctype}`, { count: result.length, sample: result[0] });
+
+    return result;
+}
 
 /**
- * Execute a Frappe method/function
- * @param {string} method - The method path (e.g., 'frappe.desk.reportview.get')
- * @param {object} args - Arguments to pass to the method
- * @returns {Promise<any>} - Method response
+ * Call a Frappe method
  */
-export const callFrappeMethod = async (method, args = {}) => {
-    try {
-        const response = await fetch(
-            `${FRAPPE_CONFIG.baseUrl}/api/method/${method}`,
-            {
-                method: 'POST',
-                headers: {
-                    'Authorization': `token ${FRAPPE_CONFIG.apiKey}:${FRAPPE_CONFIG.apiSecret}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(args)
-            }
-        );
+export async function callFrappeMethod(method, args = {}) {
+    const url = `${FRAPPE_URL}/api/method/${method}`;
 
-        if (!response.ok) {
-            throw new Error(`Frappe Method Error: ${response.status}`);
-        }
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Authorization': `token ${API_KEY}:${API_SECRET}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(args),
+    });
 
-        const data = await response.json();
-        return data.message;
-    } catch (error) {
-        console.error('Frappe Method Error:', error);
-        throw error;
+    if (!response.ok) {
+        throw new Error(`Failed to call method ${method}: ${response.statusText}`);
     }
-};
+
+    const data = await response.json();
+    return data.message || data;
+}
 
 /**
- * Fetch all regions with their branches
+ * Get All India (Country Level) Data
  */
-const fetchRegionsWithBranches = async () => {
+export async function getCountryData(filters = {}) {
     try {
-        // Fetch all Region Master documents
-        const regions = await fetchFrappeData('Region Master', {
-            // is_sub_region: 1  // Only get sub-regions, not parent HO
-        }, ['name', 'region_name', 'region_head', 'region_head_name']);
+        debugLog('getCountryData called with filters', filters);
 
-        // Fetch all branches
-        const branches = await fetchFrappeData('Region Branches', {},
-            ['name', 'branch_code', 'branch_name', 'branch_head', 'branch_head_name', 'branch_id', 'region']
-        );
+        // Fetch all data in parallel
+        // Only apply docstatus=1 filter for contracts and quotations (submitted documents)
+        const contractFilters = {};
+        const quotationFilters = { docstatus: 1 };
 
-        // Create a map of regions to their branches
+        // Apply additional filters only if they exist
+        if (filters.date) {
+            contractFilters.date = filters.date;
+            quotationFilters.date = filters.date;
+        }
+
+        const [contracts, deals, organizations, quotations, regions] = await Promise.all([
+            fetchFrappeData('CRM Contract', [
+                'name', 'customer', 'customer_name', 'region', 'branch',
+                'date', 'amount', 'total_usd', 'start_date', 'expiry_date',
+                'total_hp', 'currency', 'docstatus', 'industry', 'parent_vertical', 'deal_type'
+            ], contractFilters),
+            fetchFrappeData('CRM Deal', [
+                'name', 'customer', 'customer_name', 'region', 'branch',
+                'register_date', 'annual_revenue', 'status', 'deal_type',
+                'warranty_amc_status', 'owner', 'industry', 'parent_vertical'
+            ], {}), // No filters for deals
+            fetchFrappeData('CRM Organization', [
+                'name', 'organization_name', 'customer_hc', 'region',
+                'branch', 'industry', 'parent_vertical', 'customer_type'
+            ], {}), // No filters for organizations
+            fetchFrappeData('CRM Quotation', [
+                'name', 'customer', 'customer_name', 'region', 'branch',
+                'date', 'status', 'amount', 'total_usd', 'total_hp',
+                'docstatus'
+            ], quotationFilters),
+            fetchFrappeData('Region Master', [
+                'name', 'region_name', 'region_head', 'region_head_name'
+            ], {}),
+        ]);
+
+        debugLog('Data fetched', {
+            contracts: contracts.length,
+            deals: deals.length,
+            organizations: organizations.length,
+            quotations: quotations.length,
+            regions: regions.length
+        });
+
+        // Aggregate data by region
         const regionMap = new Map();
 
         regions.forEach(region => {
             regionMap.set(region.name, {
-                ...region,
-                branches: []
-            });
-        });
-
-        // Assign branches to their regions
-        branches.forEach(branch => {
-            if (regionMap.has(branch.region)) {
-                regionMap.get(branch.region).branches.push(branch);
-            }
-        });
-
-        return Array.from(regionMap.values());
-    } catch (error) {
-        console.error('Error fetching regions with branches:', error);
-        return [];
-    }
-};
-
-/**
- * Fetch aggregated country-level data
- */
-export const getCountryData = async () => {
-    try {
-        // Fetch contracts, deals, organizations, and quotations
-        const [contracts, deals, organizations, quotations, regionsData] = await Promise.all([
-            fetchFrappeData('CRM Contract', { docstatus: ['!=', 2] },
-                ['name', 'customer_name', 'total_usd', 'amount', 'date', 'region', 'branch', 'start_date', 'expiry_date']
-            ),
-            fetchFrappeData('CRM Deal', { docstatus: ['!=', 2] },
-                ['name', 'customer_name', 'annual_revenue', 'status', 'probability', 'region', 'branch', 'register_date']
-            ),
-            fetchFrappeData('CRM Organization', { docstatus: ['!=', 2] },
-                ['name', 'organization_name', 'region', 'branch', 'industry']
-            ),
-            fetchFrappeData('CRM Quotation', { docstatus: ['!=', 2] },
-                ['name', 'customer_name', 'total_usd', 'grand_total_inr', 'status', 'region', 'branch', 'date']
-            ),
-            fetchRegionsWithBranches()
-        ]);
-
-        // Aggregate by region
-        const regionMap = new Map();
-        const customerSet = new Set();
-
-        // Initialize regions from Region Master
-        regionsData.forEach(region => {
-            regionMap.set(region.name, {
-                id: region.name.toLowerCase().replace(/\s+/g, '-'),
-                name: region.region_name || region.name,
-                regionHead: region.region_head_name,
+                regionId: region.name,
+                regionName: region.region_name,
+                regionHead: region.region_head_name || region.region_head,
                 revenue: 0,
                 contracts: 0,
+                deals: 0,
                 customers: new Set(),
-                opportunities: 0,
-                branches: region.branches
+                quotations: 0,
+                totalHP: 0,
+                contractsList: [],
+                dealsList: [],
+                quotationsList: [],
             });
         });
 
         // Aggregate contracts by region
         contracts.forEach(contract => {
-            if (!contract.region) return;
-
-            if (!regionMap.has(contract.region)) {
-                regionMap.set(contract.region, {
-                    id: contract.region.toLowerCase().replace(/\s+/g, '-'),
-                    name: contract.region,
-                    revenue: 0,
-                    contracts: 0,
-                    customers: new Set(),
-                    opportunities: 0,
-                    branches: []
-                });
-            }
-
-            const regionData = regionMap.get(contract.region);
-            regionData.revenue += (contract.total_usd || contract.amount || 0);
-            regionData.contracts += 1;
-            if (contract.customer_name) {
-                regionData.customers.add(contract.customer_name);
-                customerSet.add(contract.customer_name);
+            if (contract.region && regionMap.has(contract.region)) {
+                const region = regionMap.get(contract.region);
+                region.revenue += parseFloat(contract.amount || 0);
+                region.contracts += 1;
+                region.totalHP += parseFloat(contract.total_hp || 0);
+                region.contractsList.push(contract);
+                if (contract.customer) {
+                    region.customers.add(contract.customer);
+                }
             }
         });
 
         // Aggregate deals by region
         deals.forEach(deal => {
-            if (!deal.region) return;
-
-            if (regionMap.has(deal.region)) {
-                regionMap.get(deal.region).opportunities += 1;
+            if (deal.region && regionMap.has(deal.region)) {
+                const region = regionMap.get(deal.region);
+                region.deals += 1;
+                region.dealsList.push(deal);
             }
         });
 
-        // Calculate growth (mock for now - would need historical data)
-        const regions = Array.from(regionMap.values()).map(r => ({
-            ...r,
-            customers: r.customers.size,
-            growth: Math.random() * 15 + 5 // Replace with actual growth calculation
-        }));
+        // Aggregate quotations by region
+        quotations.forEach(quote => {
+            if (quote.region && regionMap.has(quote.region)) {
+                const region = regionMap.get(quote.region);
+                region.quotations += 1;
+                region.quotationsList.push(quote);
+            }
+        });
 
-        const totalRevenue = regions.reduce((sum, r) => sum + r.revenue, 0);
-        const totalContracts = regions.reduce((sum, r) => sum + r.contracts, 0);
-        const totalCustomers = customerSet.size;
-        const totalOpportunities = regions.reduce((sum, r) => sum + r.opportunities, 0);
-        const avgGrowth = regions.reduce((sum, r) => sum + r.growth, 0) / (regions.length || 1);
+        // Convert Set to count for customers
+        regionMap.forEach(region => {
+            region.customers = region.customers.size;
+        });
+
+        // Calculate totals
+        const regionData = Array.from(regionMap.values());
+        const totalRevenue = contracts.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0);
+        const totalContracts = contracts.length;
+        const totalCustomers = organizations.length;
+        const totalDeals = deals.length;
+        const totalQuotations = quotations.length;
+        const totalHP = contracts.reduce((sum, c) => sum + parseFloat(c.total_hp || 0), 0);
+
+        debugLog('Aggregated totals', {
+            totalRevenue,
+            totalContracts,
+            totalCustomers,
+            totalDeals,
+            totalQuotations,
+            totalHP
+        });
 
         return {
-            metrics: {
+            regions: regionData,
+            summary: {
                 totalRevenue,
                 totalContracts,
                 totalCustomers,
-                totalOpportunities,
-                growth: avgGrowth
+                totalDeals,
+                totalQuotations,
+                totalHP,
+                avgContractValue: totalContracts > 0 ? totalRevenue / totalContracts : 0,
             },
-            children: regions
+            rawData: {
+                contracts,
+                deals,
+                organizations,
+                quotations,
+            },
         };
     } catch (error) {
         console.error('Error fetching country data:', error);
-        throw error; // Throw error instead of returning mock data
+        throw error;
     }
-};
+}
 
 /**
- * Fetch region-level data
+ * Get Region Level Data
  */
-export const getRegionData = async (regionId, regionName) => {
+export async function getRegionData(regionId, filters = {}) {
     try {
-        // Fetch all contracts, deals, and organizations for this region
-        const [contracts, deals, organizations, branches] = await Promise.all([
-            fetchFrappeData('CRM Contract', {
-                docstatus: ['!=', 2],
-                region: regionName
-            }, ['name', 'customer_name', 'total_usd', 'amount', 'date', 'branch', 'start_date', 'expiry_date']),
+        debugLog('getRegionData called', { regionId, filters });
 
-            fetchFrappeData('CRM Deal', {
-                docstatus: ['!=', 2],
-                region: regionName
-            }, ['name', 'customer_name', 'annual_revenue', 'status', 'probability', 'branch', 'register_date']),
+        const contractFilters = { region: regionId, docstatus: 1 };
+        const quotationFilters = { region: regionId, docstatus: 1 };
+        const dealFilters = { region: regionId };
+        const orgFilters = { region: regionId };
 
-            fetchFrappeData('CRM Organization', {
-                docstatus: ['!=', 2],
-                region: regionName
-            }, ['name', 'organization_name', 'branch', 'industry']),
+        if (filters.date) {
+            contractFilters.date = filters.date;
+            quotationFilters.date = filters.date;
+        }
 
-            fetchFrappeData('Region Branches', {
-                region: regionName
-            }, ['name', 'branch_code', 'branch_name', 'branch_head', 'branch_head_name', 'branch_id'])
+        // Fetch all data for this region
+        const [contracts, deals, organizations, quotations, branches] = await Promise.all([
+            fetchFrappeData('CRM Contract', [
+                'name', 'customer', 'customer_name', 'region', 'branch',
+                'date', 'amount', 'total_usd', 'start_date', 'expiry_date',
+                'total_hp', 'currency', 'docstatus', 'industry', 'parent_vertical', 'deal_type'
+            ], contractFilters),
+            fetchFrappeData('CRM Deal', [
+                'name', 'customer', 'customer_name', 'region', 'branch',
+                'register_date', 'annual_revenue', 'status', 'deal_type',
+                'warranty_amc_status', 'owner'
+            ], dealFilters),
+            fetchFrappeData('CRM Organization', [
+                'name', 'organization_name', 'customer_hc', 'region',
+                'branch', 'industry', 'parent_vertical', 'customer_type'
+            ], orgFilters),
+            fetchFrappeData('CRM Quotation', [
+                'name', 'customer', 'customer_name', 'region', 'branch',
+                'date', 'status', 'amount', 'total_usd', 'total_hp',
+                'docstatus'
+            ], quotationFilters),
+            fetchFrappeData('Region Branches', [
+                'name', 'branch_id', 'branch_name', 'branch_head',
+                'branch_head_name', 'region'
+            ], { region: regionId }),
         ]);
 
-        // Aggregate by branch
-        const branchMap = new Map();
-        const customerSet = new Set();
+        debugLog('Region data fetched', {
+            contracts: contracts.length,
+            deals: deals.length,
+            organizations: organizations.length,
+            quotations: quotations.length,
+            branches: branches.length
+        });
 
-        // Initialize branches
+        // Aggregate data by branch
+        const branchMap = new Map();
+
         branches.forEach(branch => {
-            branchMap.set(branch.branch_name || branch.branch_code, {
-                id: (branch.branch_code || branch.branch_name).toLowerCase(),
-                name: branch.branch_name || branch.branch_code,
-                code: branch.branch_code,
-                branchHead: branch.branch_head_name,
+            branchMap.set(branch.name, {
+                branchId: branch.name,
+                branchName: branch.branch_name,
+                branchHead: branch.branch_head_name || branch.branch_head,
                 revenue: 0,
                 contracts: 0,
+                deals: 0,
                 customers: new Set(),
-                opportunities: 0
+                quotations: 0,
+                totalHP: 0,
+                contractsList: [],
+                dealsList: [],
+                quotationsList: [],
             });
         });
 
         // Aggregate contracts by branch
         contracts.forEach(contract => {
-            const branchKey = contract.branch;
-            if (!branchKey) return;
-
-            if (!branchMap.has(branchKey)) {
-                branchMap.set(branchKey, {
-                    id: branchKey.toLowerCase(),
-                    name: branchKey,
-                    revenue: 0,
-                    contracts: 0,
-                    customers: new Set(),
-                    opportunities: 0
-                });
-            }
-
-            const branchData = branchMap.get(branchKey);
-            branchData.revenue += (contract.total_usd || contract.amount || 0);
-            branchData.contracts += 1;
-            if (contract.customer_name) {
-                branchData.customers.add(contract.customer_name);
-                customerSet.add(contract.customer_name);
+            if (contract.branch && branchMap.has(contract.branch)) {
+                const branch = branchMap.get(contract.branch);
+                branch.revenue += parseFloat(contract.amount || 0);
+                branch.contracts += 1;
+                branch.totalHP += parseFloat(contract.total_hp || 0);
+                branch.contractsList.push(contract);
+                if (contract.customer) {
+                    branch.customers.add(contract.customer);
+                }
             }
         });
 
         // Aggregate deals by branch
         deals.forEach(deal => {
-            const branchKey = deal.branch;
-            if (branchMap.has(branchKey)) {
-                branchMap.get(branchKey).opportunities += 1;
+            if (deal.branch && branchMap.has(deal.branch)) {
+                const branch = branchMap.get(deal.branch);
+                branch.deals += 1;
+                branch.dealsList.push(deal);
             }
         });
 
-        const branchesList = Array.from(branchMap.values()).map(b => ({
-            ...b,
-            customers: b.customers.size,
-            growth: Math.random() * 15 + 5 // Replace with actual growth calculation
-        }));
+        // Aggregate quotations by branch
+        quotations.forEach(quote => {
+            if (quote.branch && branchMap.has(quote.branch)) {
+                const branch = branchMap.get(quote.branch);
+                branch.quotations += 1;
+                branch.quotationsList.push(quote);
+            }
+        });
 
-        const totalRevenue = branchesList.reduce((sum, b) => sum + b.revenue, 0);
-        const totalContracts = branchesList.reduce((sum, b) => sum + b.contracts, 0);
-        const totalCustomers = customerSet.size;
-        const totalOpportunities = branchesList.reduce((sum, b) => sum + b.opportunities, 0);
-        const avgGrowth = branchesList.reduce((sum, b) => sum + b.growth, 0) / (branchesList.length || 1);
+        // Convert Set to count for customers
+        branchMap.forEach(branch => {
+            branch.customers = branch.customers.size;
+        });
+
+        // Calculate totals
+        const branchData = Array.from(branchMap.values());
+        const totalRevenue = contracts.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0);
+        const totalContracts = contracts.length;
+        const totalCustomers = organizations.length;
+        const totalDeals = deals.length;
+        const totalQuotations = quotations.length;
+        const totalHP = contracts.reduce((sum, c) => sum + parseFloat(c.total_hp || 0), 0);
+
+        debugLog('Region aggregated totals', {
+            totalRevenue,
+            totalContracts,
+            totalCustomers,
+            totalDeals,
+            totalQuotations,
+            totalHP
+        });
 
         return {
-            metrics: {
+            branches: branchData,
+            summary: {
                 totalRevenue,
                 totalContracts,
                 totalCustomers,
-                totalOpportunities,
-                growth: avgGrowth
+                totalDeals,
+                totalQuotations,
+                totalHP,
+                avgContractValue: totalContracts > 0 ? totalRevenue / totalContracts : 0,
             },
-            children: branchesList
+            rawData: {
+                contracts,
+                deals,
+                organizations,
+                quotations,
+            },
         };
     } catch (error) {
         console.error('Error fetching region data:', error);
-        throw error; // Throw error instead of returning mock data
+        throw error;
     }
-};
+}
 
 /**
- * Fetch branch-level data with area managers
+ * Get Branch Level Data
  */
-export const getBranchData = async (branchId, branchName) => {
+export async function getBranchData(branchId, filters = {}) {
     try {
-        // Fetch all contracts and deals for this branch
-        const [contracts, deals, organizations] = await Promise.all([
-            fetchFrappeData('CRM Contract', {
-                docstatus: ['!=', 2],
-                branch: branchName
-            }, ['name', 'customer_name', 'total_usd', 'amount', 'date', 'start_date', 'expiry_date', 'owner']),
+        debugLog('getBranchData called', { branchId, filters });
 
-            fetchFrappeData('CRM Deal', {
-                docstatus: ['!=', 2],
-                branch: branchName
-            }, ['name', 'customer_name', 'annual_revenue', 'status', 'probability', 'owner', 'register_date']),
+        const contractFilters = { branch: branchId, docstatus: 1 };
+        const quotationFilters = { branch: branchId, docstatus: 1 };
+        const dealFilters = { branch: branchId };
+        const orgFilters = { branch: branchId };
 
-            fetchFrappeData('CRM Organization', {
-                docstatus: ['!=', 2],
-                branch: branchName
-            }, ['name', 'organization_name', 'owner', 'industry'])
+        if (filters.date) {
+            contractFilters.date = filters.date;
+            quotationFilters.date = filters.date;
+        }
+
+        // Fetch all data for this branch
+        const [contracts, deals, organizations, quotations] = await Promise.all([
+            fetchFrappeData('CRM Contract', [
+                'name', 'customer', 'customer_name', 'region', 'branch',
+                'date', 'amount', 'total_usd', 'start_date', 'expiry_date',
+                'total_hp', 'currency', 'docstatus', 'industry', 'parent_vertical', 'deal_type', 'owner'
+            ], contractFilters),
+            fetchFrappeData('CRM Deal', [
+                'name', 'customer', 'customer_name', 'region', 'branch',
+                'register_date', 'annual_revenue', 'status', 'deal_type',
+                'warranty_amc_status', 'owner'
+            ], dealFilters),
+            fetchFrappeData('CRM Organization', [
+                'name', 'organization_name', 'customer_hc', 'region',
+                'branch', 'industry', 'parent_vertical', 'customer_type'
+            ], orgFilters),
+            fetchFrappeData('CRM Quotation', [
+                'name', 'customer', 'customer_name', 'region', 'branch',
+                'date', 'status', 'amount', 'total_usd', 'total_hp',
+                'docstatus', 'owner'
+            ], quotationFilters),
         ]);
 
-        // Aggregate by owner (area manager/sales person)
+        debugLog('Branch data fetched', {
+            contracts: contracts.length,
+            deals: deals.length,
+            organizations: organizations.length,
+            quotations: quotations.length
+        });
+
+        // Aggregate data by manager/owner
         const managerMap = new Map();
-        const customerSet = new Set();
 
-        // Aggregate contracts by manager
+        // Get unique owners from contracts and deals
+        const allOwners = new Set();
+        contracts.forEach(c => c.owner && allOwners.add(c.owner));
+        deals.forEach(d => d.owner && allOwners.add(d.owner));
+        quotations.forEach(q => q.owner && allOwners.add(q.owner));
+
+        allOwners.forEach(owner => {
+            managerMap.set(owner, {
+                managerId: owner,
+                managerName: owner,
+                revenue: 0,
+                contracts: 0,
+                deals: 0,
+                customers: new Set(),
+                quotations: 0,
+                totalHP: 0,
+                contractsList: [],
+                dealsList: [],
+                quotationsList: [],
+            });
+        });
+
+        // Aggregate contracts by owner
         contracts.forEach(contract => {
-            const manager = contract.owner || 'Unassigned';
-
-            if (!managerMap.has(manager)) {
-                managerMap.set(manager, {
-                    id: manager.toLowerCase().replace(/[@.]/g, '-'),
-                    name: manager.split('@')[0].replace(/\./g, ' ').toUpperCase(),
-                    email: manager,
+            const owner = contract.owner || 'Unassigned';
+            if (!managerMap.has(owner)) {
+                managerMap.set(owner, {
+                    managerId: owner,
+                    managerName: owner,
                     revenue: 0,
                     contracts: 0,
+                    deals: 0,
                     customers: new Set(),
-                    opportunities: 0
+                    quotations: 0,
+                    totalHP: 0,
+                    contractsList: [],
+                    dealsList: [],
+                    quotationsList: [],
                 });
             }
 
-            const managerData = managerMap.get(manager);
-            managerData.revenue += (contract.total_usd || contract.amount || 0);
-            managerData.contracts += 1;
-            if (contract.customer_name) {
-                managerData.customers.add(contract.customer_name);
-                customerSet.add(contract.customer_name);
+            const manager = managerMap.get(owner);
+            manager.revenue += parseFloat(contract.amount || 0);
+            manager.contracts += 1;
+            manager.totalHP += parseFloat(contract.total_hp || 0);
+            manager.contractsList.push(contract);
+            if (contract.customer) {
+                manager.customers.add(contract.customer);
             }
         });
 
-        // Aggregate deals by manager
+        // Aggregate deals by owner
         deals.forEach(deal => {
-            const manager = deal.owner || 'Unassigned';
-            if (managerMap.has(manager)) {
-                managerMap.get(manager).opportunities += 1;
+            const owner = deal.owner || 'Unassigned';
+            if (managerMap.has(owner)) {
+                const manager = managerMap.get(owner);
+                manager.deals += 1;
+                manager.dealsList.push(deal);
             }
         });
 
-        const managers = Array.from(managerMap.values()).map(m => ({
-            ...m,
-            customers: m.customers.size,
-            growth: Math.random() * 15 + 5 // Replace with actual growth calculation
-        }));
+        // Aggregate quotations by owner
+        quotations.forEach(quote => {
+            const owner = quote.owner || 'Unassigned';
+            if (managerMap.has(owner)) {
+                const manager = managerMap.get(owner);
+                manager.quotations += 1;
+                manager.quotationsList.push(quote);
+            }
+        });
 
-        const totalRevenue = managers.reduce((sum, m) => sum + m.revenue, 0);
-        const totalContracts = managers.reduce((sum, m) => sum + m.contracts, 0);
-        const totalCustomers = customerSet.size;
-        const totalOpportunities = managers.reduce((sum, m) => sum + m.opportunities, 0);
-        const avgGrowth = managers.reduce((sum, m) => sum + m.growth, 0) / (managers.length || 1);
+        // Convert Set to count for customers
+        managerMap.forEach(manager => {
+            manager.customers = manager.customers.size;
+        });
+
+        // Calculate totals
+        const managerData = Array.from(managerMap.values());
+        const totalRevenue = contracts.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0);
+        const totalContracts = contracts.length;
+        const totalCustomers = organizations.length;
+        const totalDeals = deals.length;
+        const totalQuotations = quotations.length;
+        const totalHP = contracts.reduce((sum, c) => sum + parseFloat(c.total_hp || 0), 0);
+
+        debugLog('Branch aggregated totals', {
+            totalRevenue,
+            totalContracts,
+            totalCustomers,
+            totalDeals,
+            totalQuotations,
+            totalHP
+        });
 
         return {
-            metrics: {
+            managers: managerData,
+            summary: {
                 totalRevenue,
                 totalContracts,
                 totalCustomers,
-                totalOpportunities,
-                growth: avgGrowth
+                totalDeals,
+                totalQuotations,
+                totalHP,
+                avgContractValue: totalContracts > 0 ? totalRevenue / totalContracts : 0,
             },
-            children: managers
+            rawData: {
+                contracts,
+                deals,
+                organizations,
+                quotations,
+            },
         };
     } catch (error) {
         console.error('Error fetching branch data:', error);
-        throw error; // Throw error instead of returning mock data
+        throw error;
     }
-};
+}
 
-export default {
-    fetchFrappeData,
-    callFrappeMethod,
-    getCountryData,
-    getRegionData,
-    getBranchData
-};
+/**
+ * Format currency value
+ */
+export function formatCurrency(value) {
+    if (value >= 10000000) {
+        return `₹${(value / 10000000).toFixed(2)}Cr`;
+    } else if (value >= 100000) {
+        return `₹${(value / 100000).toFixed(2)}L`;
+    } else {
+        return `₹${value.toFixed(2)}`;
+    }
+}
+
+/**
+ * Format HP value
+ */
+export function formatHP(value) {
+    return `${value.toLocaleString()} HP`;
+}
