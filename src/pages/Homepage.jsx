@@ -1,34 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-    BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-    XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
-} from 'recharts';
+    DollarSign, FileText, Users, Target,
+    TrendingUp, TrendingDown, ArrowUpDown
+} from 'lucide-react';
 import { getCountryData, formatCurrency, formatHP } from '../utils/api';
-
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF6B9D'];
+import { COLORS } from '../constants/theme';
+import KPICard from '../components/common/KPICard';
+import FilterPanel from '../components/common/FilterPanel';
+import DonutChart from '../components/charts/DonutChart';
+import RoundedBarChart from '../components/charts/RoundedBarChart';
+import SmoothLineChart from '../components/charts/SmoothLineChart';
+import PieChart from '../components/charts/PieChart';
+import AreaChart from '../components/charts/AreaChart';
+import DetailModal from '../components/common/DetailModal';
+import DataTable from '../components/common/DataTable';
+import { generateModalData, getUniqueValues } from '../utils/dataHelpers';
 
 export default function Homepage() {
     const navigate = useNavigate();
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+
     const [showModal, setShowModal] = useState(false);
-    const [modalData, setModalData] = useState(null);
+    const [modalData, setModalData] = useState([]);
     const [modalTitle, setModalTitle] = useState('');
 
-    // Filters state
-    const [filters, setFilters] = useState({
-        startDate: '',
-        endDate: '',
-        industry: '',
-        vertical: '',
-        dealType: '',
-        status: '',
-    });
-
-    // Applied filters (used for actual data fetching)
+    const [filters, setFilters] = useState({});
     const [appliedFilters, setAppliedFilters] = useState({});
+
+    // Table sorting
+    const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
     useEffect(() => {
         fetchData();
@@ -38,13 +41,10 @@ export default function Homepage() {
         setLoading(true);
         setError(null);
         try {
-            // Build Frappe filters based on applied filters
             const frappeFilters = {};
-
             if (appliedFilters.startDate && appliedFilters.endDate) {
                 frappeFilters.date = ['between', [appliedFilters.startDate, appliedFilters.endDate]];
             }
-
             const result = await getCountryData(frappeFilters);
             setData(result);
         } catch (err) {
@@ -59,110 +59,205 @@ export default function Homepage() {
     };
 
     const handleResetFilters = () => {
-        setFilters({
-            startDate: '',
-            endDate: '',
-            industry: '',
-            vertical: '',
-            dealType: '',
-            status: '',
-        });
+        setFilters({});
         setAppliedFilters({});
+    };
+
+    const handleChartClick = (chartType, segment) => {
+        const { data: detailedData, title } = generateModalData(chartType, segment, data.rawData);
+        setModalTitle(title);
+        setModalData(detailedData);
+        setShowModal(true);
     };
 
     const handleRegionClick = (regionId) => {
         navigate(`/region/${regionId}`);
     };
 
-    const handleChartClick = (chartType, chartData) => {
-        setModalTitle(chartType);
-        setModalData(chartData);
-        setShowModal(true);
+    const handleSort = (key) => {
+        let direction = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setSortConfig({ key, direction });
     };
 
-    const closeModal = () => {
-        setShowModal(false);
-        setModalData(null);
-        setModalTitle('');
-    };
+    // Filter data based on applied filters
+    const filteredData = useMemo(() => {
+        if (!data || !data.rawData) return null;
 
-    // Calculate chart data
+        let filtered = {
+            contracts: [...data.rawData.contracts],
+            deals: [...data.rawData.deals],
+            organizations: [...data.rawData.organizations],
+            quotations: [...data.rawData.quotations]
+        };
+
+        // Apply filters
+        if (appliedFilters.industry) {
+            filtered.contracts = filtered.contracts.filter(c => c.industry === appliedFilters.industry);
+            filtered.organizations = filtered.organizations.filter(o => o.industry === appliedFilters.industry);
+        }
+        if (appliedFilters.vertical) {
+            filtered.contracts = filtered.contracts.filter(c => c.parent_vertical === appliedFilters.vertical);
+            filtered.organizations = filtered.organizations.filter(o => o.parent_vertical === appliedFilters.vertical);
+        }
+        if (appliedFilters.dealType) {
+            filtered.deals = filtered.deals.filter(d => d.deal_type === appliedFilters.dealType);
+            filtered.contracts = filtered.contracts.filter(c => c.deal_type === appliedFilters.dealType);
+        }
+        if (appliedFilters.status) {
+            filtered.deals = filtered.deals.filter(d => d.status === appliedFilters.status);
+        }
+
+        return filtered;
+    }, [data, appliedFilters]);
+
+    // Chart calculations with filtered data
     const getRevenueByVertical = () => {
-        if (!data || !data.rawData) return [];
-
-        const verticalMap = new Map();
-        data.rawData.contracts.forEach(contract => {
-            const vertical = contract.parent_vertical || 'Uncategorized';
-            const current = verticalMap.get(vertical) || 0;
-            verticalMap.set(vertical, current + parseFloat(contract.amount || 0));
+        if (!filteredData) return [];
+        const map = new Map();
+        filteredData.contracts.forEach(c => {
+            const v = c.parent_vertical || 'Uncategorized';
+            map.set(v, (map.get(v) || 0) + parseFloat(c.amount || 0));
         });
+        return Array.from(map, ([name, value]) => ({ name, value }));
+    };
 
-        return Array.from(verticalMap.entries()).map(([name, value]) => ({
-            name,
-            value,
-            formattedValue: formatCurrency(value)
+    const getDealStatus = () => {
+        if (!filteredData) return [];
+        const map = new Map();
+        filteredData.deals.forEach(d => {
+            const s = d.status || 'Unknown';
+            map.set(s, (map.get(s) || 0) + 1);
+        });
+        return Array.from(map, ([name, value]) => ({ name, value }));
+    };
+
+    const getCustomersByIndustry = () => {
+        if (!filteredData) return [];
+        const map = new Map();
+        filteredData.organizations.forEach(o => {
+            const i = o.industry || 'Uncategorized';
+            map.set(i, (map.get(i) || 0) + 1);
+        });
+        return Array.from(map, ([name, value]) => ({ name, value }));
+    };
+
+    const getContractTimeline = () => {
+        if (!filteredData) return [];
+        const map = new Map();
+        filteredData.contracts.forEach(c => {
+            if (c.date) {
+                const month = c.date.substring(0, 7);
+                const curr = map.get(month) || { count: 0, revenue: 0 };
+                map.set(month, {
+                    count: curr.count + 1,
+                    revenue: curr.revenue + parseFloat(c.amount || 0)
+                });
+            }
+        });
+        return Array.from(map.entries())
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([name, d]) => ({ name, count: d.count, revenue: d.revenue }));
+    };
+
+    const getRevenueByRegion = () => {
+        if (!filteredData) return [];
+        const map = new Map();
+        filteredData.contracts.forEach(c => {
+            if (c.region) {
+                map.set(c.region, (map.get(c.region) || 0) + parseFloat(c.amount || 0));
+            }
+        });
+        return data.regions.map(r => ({
+            name: r.regionName,
+            revenue: map.get(r.regionId) || 0,
+            regionId: r.regionId
         }));
     };
 
-    const getDealStatusDistribution = () => {
-        if (!data || !data.rawData) return [];
-
-        const statusMap = new Map();
-        data.rawData.deals.forEach(deal => {
-            const status = deal.status || 'Unknown';
-            const current = statusMap.get(status) || 0;
-            statusMap.set(status, current + 1);
+    const getContractsByRegion = () => {
+        if (!filteredData) return [];
+        const map = new Map();
+        filteredData.contracts.forEach(c => {
+            if (c.region) {
+                map.set(c.region, (map.get(c.region) || 0) + 1);
+            }
         });
-
-        return Array.from(statusMap.entries()).map(([name, value]) => ({
-            name,
-            value,
-            percentage: data.summary.totalDeals > 0 ? ((value / data.summary.totalDeals) * 100).toFixed(1) : 0
+        return data.regions.map(r => ({
+            name: r.regionName,
+            contracts: map.get(r.regionId) || 0,
+            regionId: r.regionId
         }));
     };
 
-    const getContractTypeBreakdown = () => {
-        if (!data || !data.rawData) return [];
+    // Filtered summary
+    const filteredSummary = useMemo(() => {
+        if (!filteredData) return { totalRevenue: 0, totalContracts: 0, totalCustomers: 0, totalDeals: 0 };
+        return {
+            totalRevenue: filteredData.contracts.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0),
+            totalContracts: filteredData.contracts.length,
+            totalCustomers: filteredData.organizations.length,
+            totalDeals: filteredData.deals.length,
+            avgContractValue: filteredData.contracts.length > 0
+                ? filteredData.contracts.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0) / filteredData.contracts.length
+                : 0
+        };
+    }, [filteredData]);
 
-        const typeMap = new Map();
-        data.rawData.contracts.forEach(contract => {
-            const type = contract.deal_type || 'Standard';
-            const current = typeMap.get(type) || { count: 0, revenue: 0 };
-            typeMap.set(type, {
-                count: current.count + 1,
-                revenue: current.revenue + parseFloat(contract.amount || 0)
+    // Sorted regions
+    const sortedRegions = useMemo(() => {
+        if (!data) return [];
+        let sorted = [...data.regions];
+        if (sortConfig.key) {
+            sorted.sort((a, b) => {
+                if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
             });
-        });
+        }
+        return sorted;
+    }, [data, sortConfig]);
 
-        return Array.from(typeMap.entries()).map(([name, data]) => ({
-            name,
-            count: data.count,
-            revenue: data.revenue,
-            formattedRevenue: formatCurrency(data.revenue)
-        }));
-    };
-
-    const getIndustryDistribution = () => {
-        if (!data || !data.rawData) return [];
-
-        const industryMap = new Map();
-        data.rawData.organizations.forEach(org => {
-            const industry = org.industry || 'Uncategorized';
-            const current = industryMap.get(industry) || 0;
-            industryMap.set(industry, current + 1);
-        });
-
-        return Array.from(industryMap.entries()).map(([name, value]) => ({
-            name,
-            value,
-            percentage: data.summary.totalCustomers > 0 ? ((value / data.summary.totalCustomers) * 100).toFixed(1) : 0
-        }));
-    };
+    const regionColumns = [
+        { key: 'regionName', label: 'Region', bold: true },
+        { key: 'regionHead', label: 'Head' },
+        {
+            key: 'revenue',
+            label: 'Revenue',
+            align: 'right',
+            render: (v) => formatCurrency(v)
+        },
+        {
+            key: 'contracts',
+            label: 'Contracts',
+            align: 'right'
+        },
+        {
+            key: 'customers',
+            label: 'Customers',
+            align: 'right'
+        },
+        {
+            key: 'deals',
+            label: 'Opportunities',
+            align: 'right'
+        },
+        {
+            key: 'totalHP',
+            label: 'Total HP',
+            align: 'right',
+            render: (v) => formatHP(v)
+        }
+    ];
 
     if (loading) {
         return (
             <div className="flex items-center justify-center h-screen">
-                <div className="text-xl">Loading dashboard...</div>
+                <div className="text-xl font-semibold" style={{ color: COLORS.text.secondary }}>
+                    Loading dashboard...
+                </div>
             </div>
         );
     }
@@ -176,376 +271,133 @@ export default function Homepage() {
     }
 
     return (
-        <div className="p-6 bg-gray-50 min-h-screen">
-            {/* Header */}
-            <div className="mb-6">
-                <h1 className="text-3xl font-bold text-gray-800">All India Dashboard</h1>
-                <p className="text-gray-600 mt-1">National overview of all regions</p>
+        <div className="min-h-screen" style={{ backgroundColor: COLORS.background }}>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                {/* Header */}
+                <div className="mb-6">
+                    <h1 className="text-3xl font-bold" style={{ color: COLORS.text.primary }}>
+                        All India Dashboard
+                    </h1>
+                    <p className="text-gray-600 mt-1">National overview of all regions</p>
+                </div>
+
+                {/* Filters */}
+                <FilterPanel
+                    filters={filters}
+                    setFilters={setFilters}
+                    onApply={handleApplyFilters}
+                    onReset={handleResetFilters}
+                    availableOptions={{
+                        industries: data ? getUniqueValues(data.rawData.organizations, 'industry') : [],
+                        verticals: data ? getUniqueValues(data.rawData.organizations, 'parent_vertical') : [],
+                        dealTypes: data ? getUniqueValues(data.rawData.deals, 'deal_type') : [],
+                        statuses: data ? getUniqueValues(data.rawData.deals, 'status') : [],
+                    }}
+                />
+
+                {/* KPI Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                    <KPICard
+                        title="Total Revenue"
+                        value={formatCurrency(filteredSummary.totalRevenue)}
+                        subtitle={`Avg: ${formatCurrency(filteredSummary.avgContractValue)}`}
+                        icon={DollarSign}
+                    />
+                    <KPICard
+                        title="Total Contracts"
+                        value={filteredSummary.totalContracts.toLocaleString()}
+                        subtitle={`All: ${data.summary.totalContracts.toLocaleString()}`}
+                        icon={FileText}
+                    />
+                    <KPICard
+                        title="Total Customers"
+                        value={filteredSummary.totalCustomers.toLocaleString()}
+                        subtitle={`All: ${data.summary.totalCustomers.toLocaleString()}`}
+                        icon={Users}
+                    />
+                    <KPICard
+                        title="Active Opportunities"
+                        value={filteredSummary.totalDeals.toLocaleString()}
+                        subtitle={`All: ${data.summary.totalDeals.toLocaleString()}`}
+                        icon={Target}
+                    />
+                </div>
+
+                {/* Charts Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    {/* Revenue by Region */}
+                    <RoundedBarChart
+                        data={getRevenueByRegion()}
+                        title="Revenue by Region"
+                        bars={[{ dataKey: 'revenue', name: 'Revenue', color: COLORS.primary }]}
+                        onBarClick={(entry) => handleRegionClick(entry.regionId)}
+                        valueFormatter={formatCurrency}
+                    />
+
+                    {/* Contracts by Region */}
+                    <RoundedBarChart
+                        data={getContractsByRegion()}
+                        title="Contracts by Region"
+                        bars={[{ dataKey: 'contracts', name: 'Contracts', color: COLORS.solutek.blue }]}
+                        onBarClick={(entry) => handleRegionClick(entry.regionId)}
+                    />
+
+                    {/* Contract Timeline */}
+                    <SmoothLineChart
+                        data={getContractTimeline()}
+                        title="Contract Timeline"
+                        lines={[
+                            { dataKey: 'count', name: 'Count', color: COLORS.chart[0] },
+                            { dataKey: 'revenue', name: 'Revenue', color: COLORS.chart[1], yAxisId: 'right' }
+                        ]}
+                        valueFormatter={(v, n) => n === 'revenue' ? formatCurrency(v) : v}
+                    />
+
+                    {/* Revenue by Vertical */}
+                    <PieChart
+                        data={getRevenueByVertical()}
+                        title="Revenue by Vertical"
+                        onSegmentClick={(seg) => handleChartClick('Revenue by Vertical', seg)}
+                        valueFormatter={formatCurrency}
+                    />
+
+                    {/* Opportunity Status */}
+                    <DonutChart
+                        data={getDealStatus()}
+                        title="Opportunity Status Distribution"
+                        onSegmentClick={(seg) => handleChartClick('Opportunity Status Distribution', seg)}
+                    />
+
+                    {/* Customers by Industry */}
+                    <PieChart
+                        data={getCustomersByIndustry()}
+                        title="Customers by Industry"
+                        onSegmentClick={(seg) => handleChartClick('Customers by Industry', seg)}
+                    />
+                </div>
+
+                {/* Regions Table */}
+                <DataTable
+                    title="Regions Overview"
+                    columns={regionColumns}
+                    data={sortedRegions}
+                    sortConfig={sortConfig}
+                    onSort={handleSort}
+                    onRowClick={(row) => handleRegionClick(row.regionId)}
+                    actionButton={{
+                        label: 'View Details',
+                        onClick: (row) => handleRegionClick(row.regionId)
+                    }}
+                />
+
+                {/* Modal */}
+                <DetailModal
+                    show={showModal}
+                    title={modalTitle}
+                    data={modalData}
+                    onClose={() => setShowModal(false)}
+                />
             </div>
-
-            {/* Filters Section */}
-            <div className="bg-white p-4 rounded-lg shadow mb-6">
-                <h2 className="text-lg font-semibold mb-4">Filters</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                        <input
-                            type="date"
-                            value={filters.startDate}
-                            onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                        <input
-                            type="date"
-                            value={filters.endDate}
-                            onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
-                        <select
-                            value={filters.industry}
-                            onChange={(e) => setFilters({ ...filters, industry: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="">All Industries</option>
-                            {data && data.rawData && Array.from(new Set(data.rawData.organizations.map(o => o.industry).filter(Boolean))).map(ind => (
-                                <option key={ind} value={ind}>{ind}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Vertical</label>
-                        <select
-                            value={filters.vertical}
-                            onChange={(e) => setFilters({ ...filters, vertical: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="">All Verticals</option>
-                            {data && data.rawData && Array.from(new Set(data.rawData.organizations.map(o => o.parent_vertical).filter(Boolean))).map(vert => (
-                                <option key={vert} value={vert}>{vert}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Deal Type</label>
-                        <select
-                            value={filters.dealType}
-                            onChange={(e) => setFilters({ ...filters, dealType: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="">All Types</option>
-                            {data && data.rawData && Array.from(new Set(data.rawData.deals.map(d => d.deal_type).filter(Boolean))).map(type => (
-                                <option key={type} value={type}>{type}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                        <select
-                            value={filters.status}
-                            onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="">All Status</option>
-                            {data && data.rawData && Array.from(new Set(data.rawData.deals.map(d => d.status).filter(Boolean))).map(status => (
-                                <option key={status} value={status}>{status}</option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
-                <div className="flex gap-2 mt-4">
-                    <button
-                        onClick={handleApplyFilters}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-                    >
-                        Apply Filters
-                    </button>
-                    <button
-                        onClick={handleResetFilters}
-                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition"
-                    >
-                        Reset
-                    </button>
-                </div>
-            </div>
-
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-                <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-2">Total Revenue</h3>
-                    <p className="text-3xl font-bold text-gray-900">{formatCurrency(data.summary.totalRevenue)}</p>
-                    <p className="text-sm text-gray-600 mt-1">Avg: {formatCurrency(data.summary.avgContractValue)}</p>
-                </div>
-                <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-2">Total Contracts</h3>
-                    <p className="text-3xl font-bold text-gray-900">{data.summary.totalContracts.toLocaleString()}</p>
-                    <p className="text-sm text-gray-600 mt-1">Total HP: {formatHP(data.summary.totalHP)}</p>
-                </div>
-                <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-2">Total Customers</h3>
-                    <p className="text-3xl font-bold text-gray-900">{data.summary.totalCustomers.toLocaleString()}</p>
-                    <p className="text-sm text-gray-600 mt-1">Organizations</p>
-                </div>
-                <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-sm font-medium text-gray-500 mb-2">Active Deals</h3>
-                    <p className="text-3xl font-bold text-gray-900">{data.summary.totalDeals.toLocaleString()}</p>
-                    <p className="text-sm text-gray-600 mt-1">Quotes: {data.summary.totalQuotations.toLocaleString()}</p>
-                </div>
-            </div>
-
-            {/* Charts Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                {/* Revenue by Region Bar Chart */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold mb-4">Revenue by Region</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={data.regions}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="regionName" angle={-45} textAnchor="end" height={100} />
-                            <YAxis />
-                            <Tooltip formatter={(value) => formatCurrency(value)} />
-                            <Legend />
-                            <Bar
-                                dataKey="revenue"
-                                fill="#0088FE"
-                                name="Revenue"
-                                onClick={(entry) => handleRegionClick(entry.regionId)}
-                                style={{ cursor: 'pointer' }}
-                            />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-
-                {/* Contracts by Region Bar Chart */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold mb-4">Contracts by Region</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={data.regions}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="regionName" angle={-45} textAnchor="end" height={100} />
-                            <YAxis />
-                            <Tooltip />
-                            <Legend />
-                            <Bar
-                                dataKey="contracts"
-                                fill="#00C49F"
-                                name="Contracts"
-                                onClick={(entry) => handleRegionClick(entry.regionId)}
-                                style={{ cursor: 'pointer' }}
-                            />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-
-                {/* Revenue by Vertical Pie Chart */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold mb-4">Revenue by Vertical</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                            <Pie
-                                data={getRevenueByVertical()}
-                                cx="50%"
-                                cy="50%"
-                                labelLine={false}
-                                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                                outerRadius={80}
-                                fill="#8884d8"
-                                dataKey="value"
-                                onClick={(entry) => handleChartClick('Revenue by Vertical', getRevenueByVertical())}
-                                style={{ cursor: 'pointer' }}
-                            >
-                                {getRevenueByVertical().map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                ))}
-                            </Pie>
-                            <Tooltip formatter={(value) => formatCurrency(value)} />
-                            <Legend />
-                        </PieChart>
-                    </ResponsiveContainer>
-                </div>
-
-                {/* Deal Status Distribution Pie Chart */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold mb-4">Deal Status Distribution</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                            <Pie
-                                data={getDealStatusDistribution()}
-                                cx="50%"
-                                cy="50%"
-                                labelLine={false}
-                                label={({ name, percentage }) => `${name}: ${percentage}%`}
-                                outerRadius={80}
-                                fill="#8884d8"
-                                dataKey="value"
-                                onClick={(entry) => handleChartClick('Deal Status Distribution', getDealStatusDistribution())}
-                                style={{ cursor: 'pointer' }}
-                            >
-                                {getDealStatusDistribution().map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                ))}
-                            </Pie>
-                            <Tooltip />
-                            <Legend />
-                        </PieChart>
-                    </ResponsiveContainer>
-                </div>
-
-                {/* Contract Type Breakdown */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold mb-4">Contract Type Breakdown</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={getContractTypeBreakdown()}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="name" />
-                            <YAxis yAxisId="left" />
-                            <YAxis yAxisId="right" orientation="right" />
-                            <Tooltip formatter={(value, name) => name === 'revenue' ? formatCurrency(value) : value} />
-                            <Legend />
-                            <Bar
-                                yAxisId="left"
-                                dataKey="count"
-                                fill="#FFBB28"
-                                name="Count"
-                                onClick={(entry) => handleChartClick('Contract Type Breakdown', getContractTypeBreakdown())}
-                                style={{ cursor: 'pointer' }}
-                            />
-                            <Bar
-                                yAxisId="right"
-                                dataKey="revenue"
-                                fill="#FF8042"
-                                name="Revenue"
-                                onClick={(entry) => handleChartClick('Contract Type Breakdown', getContractTypeBreakdown())}
-                                style={{ cursor: 'pointer' }}
-                            />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-
-                {/* Industry Distribution Pie Chart */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold mb-4">Customers by Industry</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                            <Pie
-                                data={getIndustryDistribution()}
-                                cx="50%"
-                                cy="50%"
-                                labelLine={false}
-                                label={({ name, percentage }) => `${name}: ${percentage}%`}
-                                outerRadius={80}
-                                fill="#8884d8"
-                                dataKey="value"
-                                onClick={(entry) => handleChartClick('Customers by Industry', getIndustryDistribution())}
-                                style={{ cursor: 'pointer' }}
-                            >
-                                {getIndustryDistribution().map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                ))}
-                            </Pie>
-                            <Tooltip />
-                            <Legend />
-                        </PieChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
-
-            {/* Regions Table */}
-            <div className="bg-white p-6 rounded-lg shadow">
-                <h3 className="text-lg font-semibold mb-4">Regions Overview</h3>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Region</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Head</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Contracts</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Customers</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Deals</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total HP</th>
-                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {data.regions.map((region) => (
-                                <tr key={region.regionId} className="hover:bg-gray-50">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{region.regionName}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{region.regionHead}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{formatCurrency(region.revenue)}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{region.contracts}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{region.customers}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{region.deals}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{formatHP(region.totalHP)}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm">
-                                        <button
-                                            onClick={() => handleRegionClick(region.regionId)}
-                                            className="text-blue-600 hover:text-blue-900 font-medium"
-                                        >
-                                            View Details →
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            {/* Modal for Chart Details */}
-            {showModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={closeModal}>
-                    <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-2xl font-bold">{modalTitle}</h2>
-                            <button onClick={closeModal} className="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
-                        </div>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Value</th>
-                                        {modalData && modalData[0] && modalData[0].percentage && (
-                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Percentage</th>
-                                        )}
-                                        {modalData && modalData[0] && modalData[0].count && (
-                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Count</th>
-                                        )}
-                                        {modalData && modalData[0] && modalData[0].revenue && (
-                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
-                                        )}
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {modalData && modalData.map((item, index) => (
-                                        <tr key={index}>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                                                {item.formattedValue || item.value}
-                                            </td>
-                                            {item.percentage && (
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{item.percentage}%</td>
-                                            )}
-                                            {item.count && (
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{item.count}</td>
-                                            )}
-                                            {item.formattedRevenue && (
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{item.formattedRevenue}</td>
-                                            )}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

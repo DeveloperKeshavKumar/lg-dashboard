@@ -1,28 +1,33 @@
-import { Link } from 'react-router-dom';
-import { Home, TrendingUp } from 'lucide-react';
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { COLORS } from '../../constants/theme';
 
 export default function Header() {
-    return (
-        <header className="bg-white border-b border-gray-200 shadow-sm">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex justify-between items-center h-16">
-                    <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                        <TrendingUp className="w-8 h-8 text-blue-600" />
-                        <div className="flex flex-col">
-                            <span className="text-xl font-bold text-gray-900">Analytics Dashboard</span>
-                        </div>
-                    </Link>
+    const navigate = useNavigate();
 
-                    <nav className="flex items-center gap-6">
-                        <Link
-                            to={`${import.meta.env.VITE_FRAPPE_URL}`}
-                            target='_blank'
-                            className="flex items-center gap-2 text-gray-700 hover:text-blue-600 font-medium transition-colors"
-                        >
-                            <Home size={18} />
-                            <span>Home</span>
-                        </Link>
-                    </nav>
+    return (
+        <header className="bg-white shadow-sm border-b" style={{ borderColor: COLORS.border }}>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                <div className="flex items-center justify-between">
+                    <div
+                        className="flex flex-col items-center cursor-pointer"
+                        onClick={() => navigate('/')}
+                    >
+                        <span className="-mb-1 text-xs text-black font-semibold">LG Electronics HVAC Service & Maintenance</span>
+                        <h1 className="text-4xl font-bold" style={{ color: COLORS.primary }}>
+                            Hi-M. Solutek
+                        </h1>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <span className="text-sm text-gray-600">
+                            {new Date().toLocaleDateString('en-US', {
+                                weekday: 'short',
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
+                            })}
+                        </span>
+                    </div>
                 </div>
             </div>
         </header>

@@ -84,9 +84,9 @@ export async function getCountryData(filters = {}) {
         debugLog('getCountryData called with filters', filters);
 
         // Fetch all data in parallel
-        // Only apply docstatus=1 filter for contracts and quotations (submitted documents)
-        const contractFilters = {};
-        const quotationFilters = { docstatus: 1 };
+        // Fetch ALL contracts (remove docstatus filter to show all, not just submitted)
+        const contractFilters = {}; // Changed: No docstatus filter
+        const quotationFilters = { docstatus: 1 }; // Keep for quotations
 
         // Apply additional filters only if they exist
         if (filters.date) {
@@ -233,7 +233,7 @@ export async function getRegionData(regionId, filters = {}) {
     try {
         debugLog('getRegionData called', { regionId, filters });
 
-        const contractFilters = { region: regionId, docstatus: 1 };
+        const contractFilters = { region: regionId }; // Changed: No docstatus filter
         const quotationFilters = { region: regionId, docstatus: 1 };
         const dealFilters = { region: regionId };
         const orgFilters = { region: regionId };
@@ -384,7 +384,7 @@ export async function getBranchData(branchId, filters = {}) {
     try {
         debugLog('getBranchData called', { branchId, filters });
 
-        const contractFilters = { branch: branchId, docstatus: 1 };
+        const contractFilters = { branch: branchId }; // Changed: No docstatus filter
         const quotationFilters = { branch: branchId, docstatus: 1 };
         const dealFilters = { branch: branchId };
         const orgFilters = { branch: branchId };
@@ -427,12 +427,22 @@ export async function getBranchData(branchId, filters = {}) {
         // Aggregate data by manager/owner
         const managerMap = new Map();
 
-        // Get unique owners from contracts and deals
+        // Get ALL unique owners from deals, contracts, and quotations
         const allOwners = new Set();
-        contracts.forEach(c => c.owner && allOwners.add(c.owner));
-        deals.forEach(d => d.owner && allOwners.add(d.owner));
-        quotations.forEach(q => q.owner && allOwners.add(q.owner));
+        deals.forEach(d => {
+            if (d.owner && d.owner !== 'Administrator') allOwners.add(d.owner);
+            if (d.deal_owner && d.deal_owner !== 'Administrator') allOwners.add(d.deal_owner);
+        });
+        contracts.forEach(c => {
+            if (c.owner && c.owner !== 'Administrator') allOwners.add(c.owner);
+        });
+        quotations.forEach(q => {
+            if (q.owner && q.owner !== 'Administrator') allOwners.add(q.owner);
+        });
 
+        debugLog('Branch owners found', { count: allOwners.size, owners: Array.from(allOwners) });
+
+        // Initialize manager map with all found owners
         allOwners.forEach(owner => {
             managerMap.set(owner, {
                 managerId: owner,
@@ -480,7 +490,23 @@ export async function getBranchData(branchId, filters = {}) {
 
         // Aggregate deals by owner
         deals.forEach(deal => {
-            const owner = deal.owner || 'Unassigned';
+            const owner = deal.deal_owner || deal.owner || 'Unassigned';
+            if (!managerMap.has(owner) && owner !== 'Administrator') {
+                managerMap.set(owner, {
+                    managerId: owner,
+                    managerName: owner,
+                    revenue: 0,
+                    contracts: 0,
+                    deals: 0,
+                    customers: new Set(),
+                    quotations: 0,
+                    totalHP: 0,
+                    contractsList: [],
+                    dealsList: [],
+                    quotationsList: [],
+                });
+            }
+
             if (managerMap.has(owner)) {
                 const manager = managerMap.get(owner);
                 manager.deals += 1;

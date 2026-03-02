@@ -4,14 +4,14 @@ import Footer from './components/UI/Footer';
 import Homepage from './pages/Homepage';
 import Region from './pages/Region';
 import Branch from './pages/Branch';
-import './App.css'
+import './App.css';
 
 function App() {
   return (
     <>
       <div className="min-h-screen flex flex-col">
         <Header />
-        <main className="flex-grow">
+        <main className="flex-1">
           <Routes>
             <Route path="/" element={<Homepage />} />
             <Route path="/region/:regionId" element={<Region />} />

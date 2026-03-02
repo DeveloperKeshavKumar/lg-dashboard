@@ -1,14 +1,17 @@
+import React from 'react';
+import { COLORS } from '../../constants/theme';
+
 export default function Footer() {
     return (
-        <footer className="bg-white border-t border-gray-200 mt-12">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                    <p className="text-gray-600 text-sm">
-                        © {new Date().getFullYear()} Analytics Dashboard. Powered by Frappe v15.
+        <footer className="bg-white border-t mt-auto" style={{ borderColor: COLORS.border }}>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-500">
+                        © {new Date().getFullYear()} Hi-M. Solutek. All rights reserved.
                     </p>
-                    <div className="flex items-center gap-4 text-sm text-gray-500">
-                        <span>Last updated: {new Date().toLocaleDateString()}</span>
-                    </div>
+                    <p className="text-sm text-gray-500">
+                        Powered by Frappe CRM
+                    </p>
                 </div>
             </div>
         </footer>
