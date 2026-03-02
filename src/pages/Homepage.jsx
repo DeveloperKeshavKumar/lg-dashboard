@@ -1,0 +1,225 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { TrendingUp, TrendingDown, Users, DollarSign, Package, Activity, ChevronRight, MapPin } from 'lucide-react';
+import { getCountryData } from '../utils/api';
+
+const MetricCard = ({ title, value, change, icon: Icon, trend }) => (
+    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+        <div className="flex items-center gap-4 mb-4">
+            <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center text-white">
+                <Icon size={24} />
+            </div>
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{title}</span>
+        </div>
+        <div className="text-3xl font-bold text-gray-900 mb-2 font-mono">{value}</div>
+        <div className={`flex items-center gap-2 text-sm font-semibold ${trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
+            {trend === 'up' ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+            <span>{change}</span>
+        </div>
+    </div>
+);
+
+const RegionCard = ({ region, onClick }) => (
+    <div
+        onClick={() => onClick(region)}
+        className="bg-white border border-gray-200 rounded-xl p-6 cursor-pointer hover:shadow-lg hover:-translate-y-1 hover:border-blue-500 transition-all duration-300 group"
+    >
+        <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+                <MapPin size={20} className="text-blue-600" />
+                <h3 className="text-lg font-semibold text-gray-900">{region.name}</h3>
+            </div>
+            <ChevronRight size={20} className="text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+            <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Revenue</p>
+                <p className="text-lg font-bold text-gray-900 font-mono">₹{(region.revenue / 100000).toFixed(1)}L</p>
+            </div>
+            <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Contracts</p>
+                <p className="text-lg font-bold text-gray-900 font-mono">{region.contracts.toLocaleString()}</p>
+            </div>
+            <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Customers</p>
+                <p className="text-lg font-bold text-gray-900 font-mono">{region.customers.toLocaleString()}</p>
+            </div>
+            <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Growth</p>
+                <p className="text-lg font-bold text-green-600 font-mono">{region.growth.toFixed(1)}%</p>
+            </div>
+        </div>
+    </div>
+);
+
+export default function Homepage() {
+    const navigate = useNavigate();
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        loadData();
+    }, []);
+
+    const loadData = async () => {
+        setLoading(true);
+        try {
+            const countryData = await getCountryData();
+            setData(countryData);
+        } catch (error) {
+            console.error('Error loading data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleRegionClick = (region) => {
+        navigate(`/region/${region.id}`, {
+            state: {
+                regionName: region.name,
+                regionData: region
+            }
+        });
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="text-center">
+                    <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-lg font-semibold text-gray-700">Loading dashboard...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!data) return null;
+
+    const metrics = data.metrics;
+    const regions = data.children;
+
+    // Prepare chart data
+    const revenueChartData = regions.map(r => ({
+        name: r.name.replace(' Region', ''),
+        revenue: r.revenue / 100000,
+        contracts: r.contracts
+    }));
+
+    const growthChartData = regions.map(r => ({
+        name: r.name.replace(' Region', ''),
+        growth: r.growth
+    }));
+
+    return (
+        <div className="min-h-screen bg-gray-50 py-8">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                {/* Header */}
+                <div className="mb-8">
+                    <h1 className="text-4xl font-bold text-gray-900 mb-2">All India Dashboard</h1>
+                    <p className="text-gray-600">Real-time CRM analytics and performance metrics</p>
+                </div>
+
+                {/* Metrics Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <MetricCard
+                        title="Total Revenue"
+                        value={`₹${(metrics.totalRevenue / 10000000).toFixed(2)}Cr`}
+                        change={`+${metrics.growth.toFixed(1)}%`}
+                        icon={DollarSign}
+                        trend="up"
+                    />
+                    <MetricCard
+                        title="Total Contracts"
+                        value={metrics.totalContracts.toLocaleString()}
+                        change="+12.5%"
+                        icon={Package}
+                        trend="up"
+                    />
+                    <MetricCard
+                        title="Total Customers"
+                        value={metrics.totalCustomers.toLocaleString()}
+                        change="+8.3%"
+                        icon={Users}
+                        trend="up"
+                    />
+                    <MetricCard
+                        title="Avg Contract Value"
+                        value={`₹${Math.round(metrics.totalRevenue / metrics.totalContracts).toLocaleString()}`}
+                        change="+5.1%"
+                        icon={Activity}
+                        trend="up"
+                    />
+                </div>
+
+                {/* Charts Section */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                        <h3 className="text-lg font-bold text-gray-900 mb-4">Revenue & Contracts by Region</h3>
+                        <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={revenueChartData}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e1e4e8" />
+                                <XAxis dataKey="name" stroke="#6a737d" />
+                                <YAxis stroke="#6a737d" />
+                                <Tooltip
+                                    contentStyle={{
+                                        background: '#ffffff',
+                                        border: '1px solid #e1e4e8',
+                                        borderRadius: '8px',
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                                    }}
+                                />
+                                <Legend />
+                                <Bar dataKey="revenue" fill="#0366d6" name="Revenue (Lakhs)" />
+                                <Bar dataKey="contracts" fill="#6f42c1" name="Contracts" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+
+                    <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                        <h3 className="text-lg font-bold text-gray-900 mb-4">Growth Trend by Region</h3>
+                        <ResponsiveContainer width="100%" height={300}>
+                            <LineChart data={growthChartData}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e1e4e8" />
+                                <XAxis dataKey="name" stroke="#6a737d" />
+                                <YAxis stroke="#6a737d" />
+                                <Tooltip
+                                    contentStyle={{
+                                        background: '#ffffff',
+                                        border: '1px solid #e1e4e8',
+                                        borderRadius: '8px',
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                                    }}
+                                />
+                                <Legend />
+                                <Line
+                                    type="monotone"
+                                    dataKey="growth"
+                                    stroke="#28a745"
+                                    strokeWidth={3}
+                                    name="Growth (%)"
+                                    dot={{ fill: '#28a745', r: 6 }}
+                                />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Regions Grid */}
+                <div className="mb-8">
+                    <h2 className="text-2xl font-bold text-gray-900 mb-6">Regions</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {regions.map((region) => (
+                            <RegionCard
+                                key={region.id}
+                                region={region}
+                                onClick={handleRegionClick}
+                            />
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
