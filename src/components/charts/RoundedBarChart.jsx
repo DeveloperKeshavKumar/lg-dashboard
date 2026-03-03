@@ -31,7 +31,7 @@ export default function RoundedBarChart({
                             style={{ backgroundColor: entry.color }}
                         />
                         <span className="text-sm text-gray-600">
-                            {entry.name}: {entry.formatter ? entry.formatter(entry.value) : entry.value}
+                            {entry.name}: {entry.formatter ? entry.formatter(entry.value.toFixed(2)) : entry.value.toFixed(2)}
                         </span>
                     </div>
                 ))}

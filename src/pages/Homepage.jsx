@@ -33,6 +33,11 @@ export default function Homepage() {
     // Table sorting
     const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
+    const REGION_GROUPS = {
+        "NORTH": ["NORTH", "NORTH-1", "NORTH-2"],
+        "EAST": ["EAST", "EAST-1", "EAST-2"],
+    };
+
     useEffect(() => {
         fetchData();
     }, [appliedFilters]);
@@ -164,12 +169,26 @@ export default function Homepage() {
 
     const getRevenueByRegion = () => {
         if (!filteredData) return [];
+
         const map = new Map();
+
         filteredData.contracts.forEach(c => {
-            if (c.region) {
-                map.set(c.region, (map.get(c.region) || 0) + parseFloat(c.amount || 0));
-            }
+            if (!c.region) return;
+
+            const amount = parseFloat(c.amount || 0);
+            const contractRegion = c.region;
+
+            // own region
+            map.set(contractRegion, (map.get(contractRegion) || 0) + amount);
+
+            // parent grouped region
+            Object.entries(REGION_GROUPS).forEach(([parent, children]) => {
+                if (children.includes(contractRegion)) {
+                    map.set(parent, (map.get(parent) || 0) + amount);
+                }
+            });
         });
+
         return data.regions.map(r => ({
             name: r.regionName,
             revenue: map.get(r.regionId) || 0,
@@ -179,12 +198,25 @@ export default function Homepage() {
 
     const getContractsByRegion = () => {
         if (!filteredData) return [];
+
         const map = new Map();
+
         filteredData.contracts.forEach(c => {
-            if (c.region) {
-                map.set(c.region, (map.get(c.region) || 0) + 1);
-            }
+            if (!c.region) return;
+
+            const contractRegion = c.region;
+
+            // own region
+            map.set(contractRegion, (map.get(contractRegion) || 0) + 1);
+
+            // parent grouped region
+            Object.entries(REGION_GROUPS).forEach(([parent, children]) => {
+                if (children.includes(contractRegion)) {
+                    map.set(parent, (map.get(parent) || 0) + 1);
+                }
+            });
         });
+
         return data.regions.map(r => ({
             name: r.regionName,
             contracts: map.get(r.regionId) || 0,
@@ -195,9 +227,13 @@ export default function Homepage() {
     // Filtered summary
     const filteredSummary = useMemo(() => {
         if (!filteredData) return { totalRevenue: 0, totalContracts: 0, totalCustomers: 0, totalDeals: 0 };
+        const activeContracts = filteredData.contracts.filter(
+            c => c.custom_contract_status === "Active"
+        ).length;
         return {
             totalRevenue: filteredData.contracts.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0),
             totalContracts: filteredData.contracts.length,
+            activeContracts,
             totalCustomers: filteredData.organizations.length,
             totalDeals: filteredData.deals.length,
             avgContractValue: filteredData.contracts.length > 0
@@ -208,48 +244,88 @@ export default function Homepage() {
 
     // Sorted regions
     const sortedRegions = useMemo(() => {
-        if (!data) return [];
-        let sorted = [...data.regions];
+        if (!filteredData || !data) return [];
+
+        const regionMap = new Map();
+
+        // Initialize from master regions
+        data.regions.forEach(r => {
+            regionMap.set(r.regionId, {
+                regionId: r.regionId,
+                regionName: r.regionName,
+                regionHead: r.regionHead,
+                revenue: 0,
+                contracts: 0,
+                amcRenewal: 0,
+                warrantyConversion: 0,
+                lostAmcConversion: 0,
+                lostWarrantyConversion: 0
+            });
+        });
+
+        // Recalculate using FILTERED contracts
+        filteredData.contracts.forEach(contract => {
+
+
+            if (!contract.region) return;
+
+            const contractRegion = contract.region;
+
+            // First aggregate into its own region
+            if (regionMap.has(contractRegion)) {
+                const region = regionMap.get(contractRegion);
+                region.revenue += parseFloat(contract.amount || 0);
+                region.contracts += 1;
+                region.totalHP += parseFloat(contract.total_hp || 0);
+
+                const type = (contract.deal_type || "").toLowerCase().trim();
+                if (type === "amc renewal") region.amcRenewal++;
+                else if (type === "warranty conversion" || type === "warranty amc conversion") region.warrantyConversion++;
+                else if (type === "lost amc conversion") region.lostAmcConversion++;
+                else if (type === "lost warranty conversion") region.lostWarrantyConversion++;
+            }
+
+            // Then aggregate into parent grouped region
+            Object.entries(REGION_GROUPS).forEach(([parent, children]) => {
+                if (children.includes(contractRegion) && regionMap.has(parent)) {
+                    const parentRegion = regionMap.get(parent);
+
+                    parentRegion.revenue += parseFloat(contract.amount || 0);
+                    parentRegion.contracts += 1;
+                    parentRegion.totalHP += parseFloat(contract.total_hp || 0);
+
+                    const type = (contract.deal_type || "").toLowerCase().trim();
+                    if (type === "amc renewal") parentRegion.amcRenewal++;
+                    else if (type === "warranty conversion" || type === "warranty amc conversion") parentRegion.warrantyConversion++;
+                    else if (type === "lost amc conversion") parentRegion.lostAmcConversion++;
+                    else if (type === "lost warranty conversion") parentRegion.lostWarrantyConversion++;
+                }
+            });
+        });
+
+        let result = Array.from(regionMap.values());
+
         if (sortConfig.key) {
-            sorted.sort((a, b) => {
+            result.sort((a, b) => {
                 if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
                 if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
                 return 0;
             });
         }
-        return sorted;
-    }, [data, sortConfig]);
+
+        return result;
+    }, [filteredData, data, sortConfig]);
 
     const regionColumns = [
-        { key: 'regionName', label: 'Region', bold: true },
-        { key: 'regionHead', label: 'Head' },
-        {
-            key: 'revenue',
-            label: 'Revenue',
-            align: 'right',
-            render: (v) => formatCurrency(v)
-        },
-        {
-            key: 'contracts',
-            label: 'Contracts',
-            align: 'right'
-        },
-        {
-            key: 'customers',
-            label: 'Customers',
-            align: 'right'
-        },
-        {
-            key: 'deals',
-            label: 'Opportunities',
-            align: 'right'
-        },
-        {
-            key: 'totalHP',
-            label: 'Total HP',
-            align: 'right',
-            render: (v) => formatHP(v)
-        }
+        { key: "regionName", label: "Region", bold: true },
+        { key: "regionHead", label: "Region Head" },
+        { key: "revenue", label: "Revenue", align: "right", render: v => formatCurrency(v) },
+        { key: "contracts", label: "Total Contracts", align: "right" },
+
+        { key: "amcRenewal", label: "AMC Renewal", align: "right" },
+        { key: "warrantyConversion", label: "Warranty AMC Conversion", align: "right" },
+        { key: "lostAmcConversion", label: "Lost AMC Conversion", align: "right" },
+        { key: "lostWarrantyConversion", label: "Lost Warranty Conversion", align: "right" },
     ];
 
     if (loading) {
@@ -304,8 +380,8 @@ export default function Homepage() {
                         icon={DollarSign}
                     />
                     <KPICard
-                        title="Total Contracts"
-                        value={filteredSummary.totalContracts.toLocaleString()}
+                        title="Total Active Contracts"
+                        value={filteredSummary.activeContracts.toLocaleString()}
                         subtitle={`All: ${data.summary.totalContracts.toLocaleString()}`}
                         icon={FileText}
                     />
@@ -362,18 +438,18 @@ export default function Homepage() {
                     />
 
                     {/* Opportunity Status */}
-                    <DonutChart
+                    {/* <DonutChart
                         data={getDealStatus()}
                         title="Opportunity Status Distribution"
                         onSegmentClick={(seg) => handleChartClick('Opportunity Status Distribution', seg)}
-                    />
+                    /> */}
 
                     {/* Customers by Industry */}
-                    <PieChart
+                    {/* <PieChart
                         data={getCustomersByIndustry()}
                         title="Customers by Industry"
                         onSegmentClick={(seg) => handleChartClick('Customers by Industry', seg)}
-                    />
+                    /> */}
                 </div>
 
                 {/* Regions Table */}

@@ -40,7 +40,7 @@ export default function PieChart({
         midAngle,
         innerRadius,
         outerRadius,
-        percent
+        percent,
     }) => {
         if (percent < 0.03) return null;
 
@@ -59,7 +59,7 @@ export default function PieChart({
                 fontSize="12"
                 fontWeight="600"
             >
-                {`${(percent * 100).toFixed(0)}%`}
+                {`${(percent * 100).toFixed(2)}%`}
             </text>
         );
     };
@@ -75,8 +75,8 @@ export default function PieChart({
                         key={`legend-${index}`}
                         onClick={() => handleLegendClick(entry.value)}
                         className={`flex items-center gap-2 px-3 py-1 rounded-full cursor-pointer transition ${isDimmed
-                                ? 'opacity-40 bg-gray-100'
-                                : 'hover:bg-gray-50'
+                            ? 'opacity-40 bg-gray-100'
+                            : 'hover:bg-gray-50'
                             }`}
                         style={{
                             border: `1px solid ${entry.color}20`

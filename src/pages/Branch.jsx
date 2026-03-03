@@ -133,29 +133,9 @@ export default function Branch() {
     const getAMCStatus = () => {
         if (!filteredData) return [];
         const map = new Map();
-        filteredData.deals.forEach(d => {
-            const s = d.warranty_amc_status || 'Unknown';
+        filteredData.contracts.forEach(d => {
+            const s = d.deal_type || 'Unknown';
             map.set(s, (map.get(s) || 0) + 1);
-        });
-        return Array.from(map, ([name, value]) => ({ name, value }));
-    };
-
-    const getDealType = () => {
-        if (!filteredData) return [];
-        const map = new Map();
-        filteredData.deals.forEach(d => {
-            const t = d.deal_type || 'Unknown';
-            map.set(t, (map.get(t) || 0) + 1);
-        });
-        return Array.from(map, ([name, value]) => ({ name, value }));
-    };
-
-    const getCustomerType = () => {
-        if (!filteredData) return [];
-        const map = new Map();
-        filteredData.organizations.forEach(o => {
-            const t = o.customer_type || 'Unknown';
-            map.set(t, (map.get(t) || 0) + 1);
         });
         return Array.from(map, ([name, value]) => ({ name, value }));
     };
@@ -203,52 +183,95 @@ export default function Branch() {
     }, [filteredData]);
 
     const sortedManagers = useMemo(() => {
-        if (!data) return [];
-        let sorted = [...data.managers];
+        if (!data || !filteredData) return [];
+
+        const managerMap = new Map();
+
+        // Initialize managers from backend structure only
+        data.managers.forEach(m => {
+            managerMap.set(m.managerId, {
+                managerId: m.managerId,
+                managerName: m.managerName,
+                revenue: 0,
+                contracts: 0,
+                customers: 0,
+                deals: 0,
+                quotations: 0,
+                totalHP: 0,
+                amcRenewal: 0,
+                warrantyConversion: 0,
+                lostAmcConversion: 0,
+                lostWarrantyConversion: 0
+            });
+        });
+
+        // Aggregate CONTRACTS (strict equality)
+        filteredData.contracts.forEach(contract => {
+            const owner = contract.owner;
+            if (!owner || !managerMap.has(owner)) return;
+
+            const manager = managerMap.get(owner);
+
+            manager.revenue += parseFloat(contract.amount || 0);
+            manager.contracts += 1;
+            manager.totalHP += parseFloat(contract.total_hp || 0);
+
+            const type = (contract.deal_type || "").trim().toLowerCase();
+
+            if (type === "amc renewal") manager.amcRenewal++;
+            else if (type === "warranty conversion" || type === "warranty amc conversion") manager.warrantyConversion++;
+            else if (type === "lost amc conversion") manager.lostAmcConversion++;
+            else if (type === "lost warranty conversion") manager.lostWarrantyConversion++;
+        });
+
+        // Aggregate DEALS
+        filteredData.deals.forEach(deal => {
+            const owner = deal.owner;
+            if (owner && managerMap.has(owner)) {
+                managerMap.get(owner).deals++;
+            }
+        });
+
+        // Aggregate QUOTATIONS
+        filteredData.quotations.forEach(q => {
+            const owner = q.owner;
+            if (owner && managerMap.has(owner)) {
+                managerMap.get(owner).quotations++;
+            }
+        });
+
+        // Aggregate CUSTOMERS
+        filteredData.organizations.forEach(org => {
+            const owner = org.owner;
+            if (owner && managerMap.has(owner)) {
+                managerMap.get(owner).customers++;
+            }
+        });
+
+        const result = Array.from(managerMap.values());
+
         if (sortConfig.key) {
-            sorted.sort((a, b) => {
-                if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
-                if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
+            result.sort((a, b) => {
+                if (a[sortConfig.key] < b[sortConfig.key])
+                    return sortConfig.direction === "asc" ? -1 : 1;
+                if (a[sortConfig.key] > b[sortConfig.key])
+                    return sortConfig.direction === "asc" ? 1 : -1;
                 return 0;
             });
         }
-        return sorted;
-    }, [data, sortConfig]);
+
+        return result;
+
+    }, [data, filteredData, sortConfig]);
 
     const managerColumns = [
         { key: 'managerName', label: 'Manager', bold: true },
-        {
-            key: 'revenue',
-            label: 'Revenue',
-            align: 'right',
-            render: (v) => formatCurrency(v)
-        },
-        {
-            key: 'contracts',
-            label: 'Contracts',
-            align: 'right'
-        },
-        {
-            key: 'customers',
-            label: 'Customers',
-            align: 'right'
-        },
-        {
-            key: 'deals',
-            label: 'Opportunities',
-            align: 'right'
-        },
-        {
-            key: 'quotations',
-            label: 'Quotations',
-            align: 'right'
-        },
-        {
-            key: 'totalHP',
-            label: 'HP',
-            align: 'right',
-            render: (v) => formatHP(v)
-        }
+        { key: 'revenue', label: 'Revenue', align: 'right', render: (v) => formatCurrency(v) },
+        { key: 'contracts', label: 'Total Contracts', align: 'right' },
+        { key: 'amcRenewal', label: 'AMC Renewal', align: 'right' },
+        { key: 'warrantyConversion', label: 'Warranty Conversion', align: 'right' },
+        { key: 'lostAmcConversion', label: 'Lost AMC Conversion', align: 'right' },
+        { key: 'lostWarrantyConversion', label: 'Lost Warranty Conversion', align: 'right' },
     ];
 
     if (loading) return <div className="flex items-center justify-center h-screen"><div className="text-xl">Loading...</div></div>;
@@ -323,13 +346,13 @@ export default function Branch() {
                     />
 
                     {/* Opportunity Status — Donut (clear categorical distribution) */}
-                    <DonutChart
+                    {/* <DonutChart
                         data={getDealStatus()}
                         title="Opportunity Status"
                         onSegmentClick={(s) =>
                             handleChartClick('Opportunity Status Distribution', s)
                         }
-                    />
+                    /> */}
 
                     {/* AMC Status — Pie */}
                     <PieChart
@@ -340,15 +363,6 @@ export default function Branch() {
                         }
                     />
 
-                    {/* Opportunity Type — Pie */}
-                    <PieChart
-                        data={getDealType()}
-                        title="Opportunity Type"
-                        onSegmentClick={(s) =>
-                            handleChartClick('Opportunity Type Distribution', s)
-                        }
-                    />
-
                     {/* Revenue by Vertical — Donut (financial composition) */}
                     <DonutChart
                         data={getRevenueByVertical()}
@@ -356,15 +370,6 @@ export default function Branch() {
                         valueFormatter={formatCurrency}
                         onSegmentClick={(s) =>
                             handleChartClick('Revenue by Vertical', s)
-                        }
-                    />
-
-                    {/* Customer Type — Pie */}
-                    <PieChart
-                        data={getCustomerType()}
-                        title="Customer Type"
-                        onSegmentClick={(s) =>
-                            handleChartClick('Customer Type Distribution', s)
                         }
                     />
 

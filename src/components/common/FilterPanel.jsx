@@ -44,7 +44,7 @@ export default function FilterPanel({
                 </div>
 
                 {/* Industry Filter */}
-                {availableOptions.industries && (
+                {/* {availableOptions.industries && (
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                             Industry
@@ -60,7 +60,7 @@ export default function FilterPanel({
                             ))}
                         </select>
                     </div>
-                )}
+                )} */}
 
                 {/* Vertical Filter */}
                 {availableOptions.verticals && (
@@ -82,7 +82,7 @@ export default function FilterPanel({
                 )}
 
                 {/* Deal Type Filter */}
-                {availableOptions.dealTypes && (
+                {/* {availableOptions.dealTypes && (
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                             Opportunity Type
@@ -98,10 +98,10 @@ export default function FilterPanel({
                             ))}
                         </select>
                     </div>
-                )}
+                )} */}
 
                 {/* Status Filter */}
-                {availableOptions.statuses && (
+                {/* {availableOptions.statuses && (
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                             Status
@@ -117,10 +117,10 @@ export default function FilterPanel({
                             ))}
                         </select>
                     </div>
-                )}
+                )} */}
 
                 {/* AMC Status Filter */}
-                {availableOptions.amcStatuses && (
+                {/* {availableOptions.amcStatuses && (
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                             AMC Status
@@ -136,10 +136,10 @@ export default function FilterPanel({
                             ))}
                         </select>
                     </div>
-                )}
+                )} */}
 
                 {/* Owner Filter */}
-                {availableOptions.owners && (
+                {/* {availableOptions.owners && (
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                             Owner
@@ -155,7 +155,7 @@ export default function FilterPanel({
                             ))}
                         </select>
                     </div>
-                )}
+                )} */}
 
                 {/* Action Buttons */}
                 <div className="flex gap-2">

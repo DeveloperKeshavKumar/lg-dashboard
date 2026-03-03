@@ -98,7 +98,7 @@ export async function getCountryData(filters = {}) {
             fetchFrappeData('CRM Contract', [
                 'name', 'customer', 'customer_name', 'region', 'branch',
                 'date', 'amount', 'total_usd', 'start_date', 'expiry_date',
-                'total_hp', 'currency', 'docstatus', 'industry', 'parent_vertical', 'deal_type'
+                'total_hp', 'currency', 'docstatus', 'industry', 'parent_vertical', 'deal_type', "custom_contract_status"
             ], contractFilters),
             fetchFrappeData('CRM Deal', [
                 'name', 'customer', 'customer_name', 'region', 'branch',
@@ -138,6 +138,10 @@ export async function getCountryData(filters = {}) {
                 revenue: 0,
                 contracts: 0,
                 deals: 0,
+                amcRenewal: 0,
+                warrantyConversion: 0,
+                lostAmcConversion: 0,
+                lostWarrantyConversion: 0,
                 customers: new Set(),
                 quotations: 0,
                 totalHP: 0,
@@ -154,6 +158,24 @@ export async function getCountryData(filters = {}) {
                 region.revenue += parseFloat(contract.amount || 0);
                 region.contracts += 1;
                 region.totalHP += parseFloat(contract.total_hp || 0);
+
+                const type = (contract.deal_type || "")
+                    .toLowerCase()
+                    .trim();
+
+                if (type === "amc renewal") {
+                    region.amcRenewal++;
+                }
+                else if (type === "warranty conversion" || type === "warranty amc conversion") {
+                    region.warrantyConversion++;
+                }
+                else if (type === "lost amc conversion") {
+                    region.lostAmcConversion++;
+                }
+                else if (type === "lost warranty conversion") {
+                    region.lostWarrantyConversion++;
+                }
+
                 region.contractsList.push(contract);
                 if (contract.customer) {
                     region.customers.add(contract.customer);
@@ -233,10 +255,19 @@ export async function getRegionData(regionId, filters = {}) {
     try {
         debugLog('getRegionData called', { regionId, filters });
 
-        const contractFilters = { region: regionId }; // Changed: No docstatus filter
-        const quotationFilters = { region: regionId, docstatus: 1 };
-        const dealFilters = { region: regionId };
-        const orgFilters = { region: regionId };
+        const REGION_GROUPS = {
+            "NORTH": ["NORTH", "NORTH-1", "NORTH-2"],
+            "EAST": ["EAST", "EAST-1", "EAST-2"],
+        };
+
+        const regionFilterValue = REGION_GROUPS[regionId]
+            ? ["in", REGION_GROUPS[regionId]]
+            : regionId;
+
+        const contractFilters = { region: regionFilterValue };
+        const quotationFilters = { region: regionFilterValue, docstatus: 1 };
+        const dealFilters = { region: regionFilterValue };
+        const orgFilters = { region: regionFilterValue };
 
         if (filters.date) {
             contractFilters.date = filters.date;
@@ -267,7 +298,7 @@ export async function getRegionData(regionId, filters = {}) {
             fetchFrappeData('Region Branches', [
                 'name', 'branch_id', 'branch_name', 'branch_head',
                 'branch_head_name', 'region'
-            ], { region: regionId }),
+            ], { region: regionFilterValue }),
         ]);
 
         debugLog('Region data fetched', {

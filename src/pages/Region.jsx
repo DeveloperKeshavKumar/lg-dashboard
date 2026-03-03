@@ -90,6 +90,7 @@ export default function Region() {
         }
         if (appliedFilters.dealType) {
             filtered.deals = filtered.deals.filter(d => d.deal_type === appliedFilters.dealType);
+            filtered.contracts = filtered.contracts.filter(c => c.deal_type === appliedFilters.dealType);
         }
         if (appliedFilters.status) {
             filtered.deals = filtered.deals.filter(d => d.status === appliedFilters.status);
@@ -125,8 +126,8 @@ export default function Region() {
     const getAMCStatus = () => {
         if (!filteredData) return [];
         const map = new Map();
-        filteredData.deals.forEach(d => {
-            const s = d.warranty_amc_status || 'Unknown';
+        filteredData.contracts.forEach(d => {
+            const s = d.deal_type || 'Unknown';
             map.set(s, (map.get(s) || 0) + 1);
         });
         return Array.from(map, ([name, value]) => ({ name, value }));
@@ -201,48 +202,91 @@ export default function Region() {
     }, [filteredData]);
 
     const sortedBranches = useMemo(() => {
-        if (!data) return [];
-        let sorted = [...data.branches];
+        if (!data || !filteredData) return [];
+
+        const branchMap = new Map();
+
+        // Initialize only structure (no prefilled numbers)
+        data.branches.forEach(b => {
+            branchMap.set(b.branchId, {
+                branchId: b.branchId,
+                branchName: b.branchName,
+                branchHead: b.branchHead,
+                revenue: 0,
+                contracts: 0,
+                customers: 0,
+                deals: 0,
+                totalHP: 0,
+                nullType: 0,
+                amcRenewal: 0,
+                warrantyConversion: 0,
+                lostAmcConversion: 0,
+                lostWarrantyConversion: 0
+            });
+        });
+
+        // STRICT aggregation from FILTERED contracts only
+        filteredData.contracts.forEach(contract => {
+            if (!contract.branch || !branchMap.has(contract.branch)) return;
+
+            const branch = branchMap.get(contract.branch);
+
+            branch.revenue += parseFloat(contract.amount || 0);
+            branch.contracts += 1;
+            branch.totalHP += parseFloat(contract.total_hp || 0);
+
+            const type = (contract.deal_type || "").trim().toLowerCase();
+            if (!type) branch.nullType++;
+            if (type === "amc renewal") branch.amcRenewal++;
+            else if (type === "warranty conversion" || type === "warranty amc conversion") branch.warrantyConversion++;
+            else if (type === "lost amc conversion") branch.lostAmcConversion++;
+            else if (type === "lost warranty conversion") branch.lostWarrantyConversion++;
+        });
+
+        // Aggregate deals (filtered)
+        filteredData.deals.forEach(deal => {
+            if (deal.branch && branchMap.has(deal.branch)) {
+                branchMap.get(deal.branch).deals++;
+            }
+        });
+
+        // Aggregate customers (filtered)
+        filteredData.organizations.forEach(org => {
+            if (org.branch && branchMap.has(org.branch)) {
+                branchMap.get(org.branch).customers++;
+            }
+        });
+
+        let result = Array.from(branchMap.values());
+
         if (sortConfig.key) {
-            sorted.sort((a, b) => {
-                if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
-                if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
+            result.sort((a, b) => {
+                if (a[sortConfig.key] < b[sortConfig.key])
+                    return sortConfig.direction === 'asc' ? -1 : 1;
+                if (a[sortConfig.key] > b[sortConfig.key])
+                    return sortConfig.direction === 'asc' ? 1 : -1;
                 return 0;
             });
         }
-        return sorted;
-    }, [data, sortConfig]);
+
+        return result;
+    }, [data, filteredData, sortConfig]);
 
     const branchColumns = [
         { key: 'branchName', label: 'Branch', bold: true },
         { key: 'branchHead', label: 'Head' },
-        {
-            key: 'revenue',
-            label: 'Revenue',
-            align: 'right',
-            render: (v) => formatCurrency(v)
-        },
-        {
-            key: 'contracts',
-            label: 'Contracts',
-            align: 'right'
-        },
-        {
-            key: 'customers',
-            label: 'Customers',
-            align: 'right'
-        },
-        {
-            key: 'deals',
-            label: 'Opportunities',
-            align: 'right'
-        },
-        {
-            key: 'totalHP',
-            label: 'HP',
-            align: 'right',
-            render: (v) => formatHP(v)
-        }
+        { key: 'revenue', label: 'Revenue', align: 'right', render: v => formatCurrency(v) },
+        { key: 'contracts', label: 'Total Contracts', align: 'right' },
+
+        { key: 'amcRenewal', label: 'AMC Renewal', align: 'right' },
+        { key: 'warrantyConversion', label: 'Warranty Conversion', align: 'right' },
+        { key: 'lostAmcConversion', label: 'Lost AMC Conversion', align: 'right' },
+        { key: 'lostWarrantyConversion', label: 'Lost Warranty Conversion', align: 'right' },
+        { key: 'nullType', label: 'No Type', align: 'right' },
+
+        // { key: 'customers', label: 'Customers', align: 'right' },
+        // { key: 'deals', label: 'Opportunities', align: 'right' },
+        // { key: 'totalHP', label: 'HP', align: 'right', render: v => formatHP(v) }
     ];
 
     if (loading) return <div className="flex items-center justify-center h-screen"><div className="text-xl">Loading...</div></div>;
@@ -313,13 +357,13 @@ export default function Region() {
                     />
 
                     {/* Opportunity Status — Donut (status segmentation) */}
-                    <DonutChart
+                    {/* <DonutChart
                         data={getDealStatus()}
                         title="Opportunity Status Distribution"
                         onSegmentClick={(s) =>
                             handleChartClick('Opportunity Status Distribution', s)
                         }
-                    />
+                    /> */}
 
                     {/* AMC Status — Pie */}
                     <PieChart
