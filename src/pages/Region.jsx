@@ -188,10 +188,14 @@ export default function Region() {
     };
 
     const filteredSummary = useMemo(() => {
-        if (!filteredData) return { totalRevenue: 0, totalContracts: 0, totalCustomers: 0, totalDeals: 0 };
+        if (!filteredData) return { totalRevenue: 0, activeContracts: 0, totalContracts: 0, totalCustomers: 0, totalDeals: 0 };
+        const activeContracts = filteredData.contracts.filter(
+            c => c.custom_contract_status === "Active"
+        ).length;
         return {
             totalRevenue: filteredData.contracts.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0),
             totalContracts: filteredData.contracts.length,
+            activeContracts,
             totalCustomers: filteredData.organizations.length,
             totalDeals: filteredData.deals.length,
             totalQuotations: filteredData.quotations.length,
@@ -322,7 +326,7 @@ export default function Region() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
                     <KPICard title="Total Revenue" value={formatCurrency(filteredSummary.totalRevenue)} subtitle={`Avg: ${formatCurrency(filteredSummary.avgContractValue)}`} icon={DollarSign} />
-                    <KPICard title="Total Contracts" value={filteredSummary.totalContracts.toLocaleString()} subtitle={`All: ${data.summary.totalContracts.toLocaleString()}`} icon={FileText} />
+                    <KPICard title="Total Active Contracts" value={filteredSummary.activeContracts.toLocaleString()} subtitle={`All: ${data.summary.totalContracts.toLocaleString()}`} icon={FileText} />
                     <KPICard title="Total Customers" value={filteredSummary.totalCustomers.toLocaleString()} subtitle={`All: ${data.summary.totalCustomers.toLocaleString()}`} icon={Users} />
                     <KPICard title="Active Opportunities" value={filteredSummary.totalDeals.toLocaleString()} subtitle={`Quotes: ${filteredSummary.totalQuotations.toLocaleString()}`} icon={Target} />
                 </div>

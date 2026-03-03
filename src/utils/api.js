@@ -279,7 +279,7 @@ export async function getRegionData(regionId, filters = {}) {
             fetchFrappeData('CRM Contract', [
                 'name', 'customer', 'customer_name', 'region', 'branch',
                 'date', 'amount', 'total_usd', 'start_date', 'expiry_date',
-                'total_hp', 'currency', 'docstatus', 'industry', 'parent_vertical', 'deal_type'
+                'total_hp', 'currency', 'docstatus', 'industry', 'parent_vertical', 'deal_type', "custom_contract_status"
             ], contractFilters),
             fetchFrappeData('CRM Deal', [
                 'name', 'customer', 'customer_name', 'region', 'branch',
@@ -430,7 +430,7 @@ export async function getBranchData(branchId, filters = {}) {
             fetchFrappeData('CRM Contract', [
                 'name', 'customer', 'customer_name', 'region', 'branch',
                 'date', 'amount', 'total_usd', 'start_date', 'expiry_date',
-                'total_hp', 'currency', 'docstatus', 'industry', 'parent_vertical', 'deal_type', 'owner'
+                'total_hp', 'currency', 'docstatus', 'industry', 'parent_vertical', 'deal_type', 'owner', "custom_contract_status"
             ], contractFilters),
             fetchFrappeData('CRM Deal', [
                 'name', 'customer', 'customer_name', 'region', 'branch',
