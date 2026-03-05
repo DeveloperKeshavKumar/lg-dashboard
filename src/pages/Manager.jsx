@@ -9,7 +9,6 @@ import KPICard from '../components/common/KPICard';
 import FilterPanel from '../components/common/FilterPanel';
 import StackedBarChart, { formatCurrencyCompact } from '../components/charts/StackedBarChart';
 import DonutChart from '../components/charts/DonutChart';
-import PieChart from '../components/charts/PieChart';
 import AreaChart from '../components/charts/AreaChart';
 import Breadcrumb from '../components/common/BreadCrumb';
 import DataTable from '../components/common/DataTable';
@@ -23,7 +22,7 @@ export default function Manager() {
     const [localFilters, setLocalFilters] = useState(globalFilters);
     const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
-    const regionId = location.state?.regionId;
+    const regionId = location.state?.regionId || 'EAST-1';
     const managerName = location.state?.managerName || managerId;
     const branchHeadId = location.state?.branchHeadId || managerId;
 
@@ -31,7 +30,14 @@ export default function Manager() {
         setLocalFilters(globalFilters);
     }, [globalFilters]);
 
-    const { data: regionData, isLoading, error } = useRegionData(regionId, globalFilters);
+    const { data: regionData, isLoading, error } = useRegionData(regionId, {
+        startDate: globalFilters.startDate,
+        endDate: globalFilters.endDate,
+        industry: globalFilters.industry,
+        vertical: globalFilters.vertical,
+        dealType: globalFilters.dealType,
+        status: globalFilters.status
+    });
 
     const handleApplyFilters = () => {
         updateFilters(localFilters);
@@ -42,6 +48,10 @@ export default function Manager() {
         resetFilters();
     };
 
+    const handleBranchClick = (branchId) => {
+        navigate(`/branch/${branchId}`);
+    };
+
     const handleSort = (key) => {
         let direction = 'asc';
         if (sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -50,45 +60,48 @@ export default function Manager() {
         setSortConfig({ key, direction });
     };
 
-    const handleBranchClick = (branchId) => {
-        navigate(`/branch/${branchId}`);
-    };
-
     const managerData = useMemo(() => {
         if (!regionData) return null;
 
-        const allContracts = regionData.rawData.contracts || [];
-        const allDeals = regionData.rawData.deals || [];
-        const allQuotations = regionData.rawData.quotations || [];
-        const allOrganizations = regionData.rawData.organizations || [];
         const allBranches = regionData.branches || [];
 
-        // Find branches managed by this branch head
-        const managedBranchObjs = allBranches.filter(
-            b => b.branchHead === branchHeadId || b.branchHead === managerId
-        );
+        // Find ALL branches managed by this manager
+        const managedBranchObjs = allBranches.filter(b => {
+            const head = b.branchHead || '';
+            return head === branchHeadId || head === managerId || head === managerName;
+        });
 
-        const managedBranches = managedBranchObjs.map(b => b.branchId);
-        const managedBranchSet = new Set(managedBranches);
+        const managedBranchIds = managedBranchObjs.map(b => b.branchId);
+        const managedBranchSet = new Set(managedBranchIds);
 
-        // Filter by branch
-        let filteredContracts = allContracts.filter(c => managedBranchSet.has(c.branch));
-        let filteredDeals = allDeals.filter(d => managedBranchSet.has(d.branch));
-        let filteredQuotations = allQuotations.filter(q => managedBranchSet.has(q.branch));
-        let filteredOrganizations = allOrganizations.filter(o => managedBranchSet.has(o.branch));
+        // Get ALL contracts/deals for this manager's branches from rawData
+        const allContracts = regionData.rawData?.contracts || [];
+        const allDeals = regionData.rawData?.deals || [];
+        const allQuotations = regionData.rawData?.quotations || [];
+        const allOrganizations = regionData.rawData?.organizations || [];
 
-        // Apply branch filter if selected
-        if (globalFilters.branch) {
-            filteredContracts = filteredContracts.filter(c => c.branch === globalFilters.branch);
-            filteredDeals = filteredDeals.filter(d => d.branch === globalFilters.branch);
-            filteredQuotations = filteredQuotations.filter(q => q.branch === globalFilters.branch);
-            filteredOrganizations = filteredOrganizations.filter(o => o.branch === globalFilters.branch);
+        // Filter by managed branches ONLY (no other filters)
+        let managerContracts = allContracts.filter(c => managedBranchSet.has(c.branch));
+        let managerDeals = allDeals.filter(d => managedBranchSet.has(d.branch));
+        let managerQuotations = allQuotations.filter(q => managedBranchSet.has(q.branch));
+        let managerOrganizations = allOrganizations.filter(o => managedBranchSet.has(o.branch));
+
+        // Apply branch-specific filter if user selected a specific branch
+        if (globalFilters.branch && globalFilters.branch !== 'all') {
+            managerContracts = managerContracts.filter(c => c.branch === globalFilters.branch);
+            managerDeals = managerDeals.filter(d => d.branch === globalFilters.branch);
+            managerQuotations = managerQuotations.filter(q => q.branch === globalFilters.branch);
+            managerOrganizations = managerOrganizations.filter(o => o.branch === globalFilters.branch);
         }
 
-        const customerSet = new Set(filteredContracts.map(c => c.customer).filter(Boolean));
-        const totalRevenue = filteredContracts.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0);
-        const totalContracts = filteredContracts.length;
-        const activeContracts = filteredContracts.filter(c => c.custom_contract_status === "Active").length;
+        const customerSet = new Set();
+        managerContracts.forEach(c => {
+            if (c.customer) customerSet.add(c.customer);
+        });
+
+        const totalRevenue = managerContracts.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0);
+        const totalContracts = managerContracts.length;
+        const activeContracts = managerContracts.filter(c => c.custom_contract_status === "Active").length;
 
         return {
             summary: {
@@ -96,26 +109,35 @@ export default function Manager() {
                 totalContracts,
                 activeContracts,
                 totalCustomers: customerSet.size,
-                totalDeals: filteredDeals.length,
-                totalQuotations: filteredQuotations.length,
-                totalBranches: managedBranches.length,
+                totalDeals: managerDeals.length,
+                totalQuotations: managerQuotations.length,
+                totalBranches: managedBranchIds.length,
                 avgContractValue: totalContracts > 0 ? totalRevenue / totalContracts : 0
             },
             rawData: {
-                contracts: filteredContracts,
-                deals: filteredDeals,
-                quotations: filteredQuotations,
-                organizations: filteredOrganizations,
-                branches: managedBranches
+                contracts: managerContracts,
+                deals: managerDeals,
+                quotations: managerQuotations,
+                organizations: managerOrganizations,
+                branches: managedBranchIds
             },
             branchDetails: managedBranchObjs
         };
-    }, [regionData, managerId, branchHeadId, globalFilters]);
+    }, [regionData, managerId, branchHeadId, managerName, globalFilters.branch]);
 
     const chartData = useMemo(() => {
         if (!managerData) return null;
 
         const { rawData, branchDetails } = managerData;
+
+        const categorizeDealType = (dealType) => {
+            const type = (dealType || "").toLowerCase().trim();
+            if (type === "amc renewal") return 'amcRenewal';
+            if (type === "warranty conversion" || type === "warranty amc conversion") return 'warrantyConversion';
+            if (type === "lost amc conversion") return 'lostAmcConversion';
+            if (type === "lost warranty conversion") return 'lostWarrantyConversion';
+            return 'others';
+        };
 
         const revenueByVertical = () => {
             const map = new Map();
@@ -131,15 +153,6 @@ export default function Manager() {
             rawData.deals.forEach(d => {
                 const s = d.status || 'Unknown';
                 map.set(s, (map.get(s) || 0) + 1);
-            });
-            return Array.from(map, ([name, value]) => ({ name, value }));
-        };
-
-        const dealTypeBreakdown = () => {
-            const map = new Map();
-            rawData.contracts.forEach(c => {
-                const type = c.deal_type || 'Unknown';
-                map.set(type, (map.get(type) || 0) + 1);
             });
             return Array.from(map, ([name, value]) => ({ name, value }));
         };
@@ -161,142 +174,113 @@ export default function Manager() {
                 .map(([name, d]) => ({ name, count: d.count, revenue: d.revenue }));
         };
 
-        const revenueByBranch = () => {
-            const map = new Map();
+        // Revenue by branch stacked
+        const revenueByBranchStacked = branchDetails.map(b => ({
+            name: b.branchName,
+            branchId: b.branchId,
+            amcRenewal: 0,
+            warrantyConversion: 0,
+            lostAmcConversion: 0,
+            lostWarrantyConversion: 0,
+            others: 0
+        }));
 
-            branchDetails.forEach(branch => {
-                map.set(branch.branchId, {
-                    name: branch.branchName,
-                    branchId: branch.branchId,
-                    amcRenewal: 0,
-                    warrantyConversion: 0,
-                    lostAmcConversion: 0,
-                    lostWarrantyConversion: 0,
-                });
-            });
+        rawData.contracts.forEach(c => {
+            const branch = revenueByBranchStacked.find(b => b.branchId === c.branch);
+            if (branch) {
+                const amount = parseFloat(c.amount || 0);
+                const category = categorizeDealType(c.deal_type);
+                branch[category] += amount;
+            }
+        });
 
-            rawData.contracts.forEach(c => {
-                if (c.branch && map.has(c.branch)) {
-                    const branch = map.get(c.branch);
-                    const revenue = parseFloat(c.amount || 0);
-                    const type = (c.deal_type || "").toLowerCase().trim();
+        // Contracts by branch stacked
+        const contractsByBranchStacked = branchDetails.map(b => ({
+            name: b.branchName,
+            branchId: b.branchId,
+            amcRenewal: 0,
+            warrantyConversion: 0,
+            lostAmcConversion: 0,
+            lostWarrantyConversion: 0,
+            others: 0
+        }));
 
-                    if (type === "amc renewal") branch.amcRenewal += revenue;
-                    else if (type === "warranty conversion" || type === "warranty amc conversion") branch.warrantyConversion += revenue;
-                    else if (type === "lost amc conversion") branch.lostAmcConversion += revenue;
-                    else if (type === "lost warranty conversion") branch.lostWarrantyConversion += revenue;
-                }
-            });
-
-            return Array.from(map.values());
-        };
-
-        const contractsByBranchStacked = () => {
-            const map = new Map();
-            branchDetails.forEach(branch => {
-                map.set(branch.branchId, {
-                    name: branch.branchName,
-                    branchId: branch.branchId,
-                    amcRenewal: 0,
-                    warrantyConversion: 0,
-                    lostAmcConversion: 0,
-                    lostWarrantyConversion: 0,
-                });
-            });
-
-            rawData.contracts.forEach(c => {
-                if (c.branch && map.has(c.branch)) {
-                    const branch = map.get(c.branch);
-                    const type = (c.deal_type || "").toLowerCase().trim();
-
-                    if (type === "amc renewal") branch.amcRenewal += 1;
-                    else if (type === "warranty conversion" || type === "warranty amc conversion") branch.warrantyConversion += 1;
-                    else if (type === "lost amc conversion") branch.lostAmcConversion += 1;
-                    else if (type === "lost warranty conversion") branch.lostWarrantyConversion += 1;
-                }
-            });
-
-            return Array.from(map.values());
-        };
+        rawData.contracts.forEach(c => {
+            const branch = contractsByBranchStacked.find(b => b.branchId === c.branch);
+            if (branch) {
+                const category = categorizeDealType(c.deal_type);
+                branch[category] += 1;
+            }
+        });
 
         return {
             revenueByVertical: revenueByVertical(),
             dealStatus: dealStatus(),
-            dealTypeBreakdown: dealTypeBreakdown(),
             contractTimeline: contractTimeline(),
-            revenueByBranch: revenueByBranch(),
-            contractsByBranchStacked: contractsByBranchStacked()
+            revenueByBranchStacked,
+            contractsByBranchStacked
         };
     }, [managerData]);
 
-    // Branch-wise summary table
-    const branchSummary = useMemo(() => {
+    const sortedBranches = useMemo(() => {
         if (!managerData) return [];
 
-        const { rawData, branchDetails } = managerData;
         const branchMap = new Map();
 
-        branchDetails.forEach(branch => {
-            branchMap.set(branch.branchId, {
-                branchId: branch.branchId,
-                branchName: branch.branchName,
+        // Initialize branches
+        managerData.branchDetails.forEach(b => {
+            branchMap.set(b.branchId, {
+                branchId: b.branchId,
+                branchName: b.branchName,
+                branchHead: b.branchHead,
                 revenue: 0,
                 contracts: 0,
-                activeContracts: 0,
-                customers: new Set(),
                 deals: 0,
+                customers: 0,
                 amcRenewal: 0,
                 warrantyConversion: 0,
                 lostAmcConversion: 0,
-                lostWarrantyConversion: 0
+                lostWarrantyConversion: 0,
+                others: 0
             });
         });
 
-        rawData.contracts.forEach(c => {
+        // Aggregate contracts
+        managerData.rawData.contracts.forEach(c => {
             if (c.branch && branchMap.has(c.branch)) {
                 const branch = branchMap.get(c.branch);
                 branch.revenue += parseFloat(c.amount || 0);
                 branch.contracts += 1;
-                if (c.custom_contract_status === "Active") branch.activeContracts += 1;
-                if (c.customer) branch.customers.add(c.customer);
 
                 const type = (c.deal_type || "").toLowerCase().trim();
                 if (type === "amc renewal") branch.amcRenewal++;
                 else if (type === "warranty conversion" || type === "warranty amc conversion") branch.warrantyConversion++;
                 else if (type === "lost amc conversion") branch.lostAmcConversion++;
                 else if (type === "lost warranty conversion") branch.lostWarrantyConversion++;
+                else branch.others++;
             }
         });
 
-        rawData.deals.forEach(d => {
+        // Aggregate deals
+        managerData.rawData.deals.forEach(d => {
             if (d.branch && branchMap.has(d.branch)) {
                 branchMap.get(d.branch).deals++;
             }
         });
 
-        branchMap.forEach(branch => {
-            branch.customers = branch.customers.size;
+        // Aggregate customers
+        managerData.rawData.organizations.forEach(o => {
+            if (o.branch && branchMap.has(o.branch)) {
+                branchMap.get(o.branch).customers++;
+            }
         });
 
-        return Array.from(branchMap.values());
-    }, [managerData]);
-
-    const sortedContracts = useMemo(() => {
-        if (!managerData) return [];
-        let result = [...managerData.rawData.contracts];
+        let result = Array.from(branchMap.values());
 
         if (sortConfig.key) {
             result.sort((a, b) => {
-                let aVal = a[sortConfig.key];
-                let bVal = b[sortConfig.key];
-
-                if (sortConfig.key === 'amount') {
-                    aVal = parseFloat(aVal || 0);
-                    bVal = parseFloat(bVal || 0);
-                }
-
-                if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-                if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+                if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
                 return 0;
             });
         }
@@ -312,16 +296,7 @@ export default function Manager() {
         { key: 'warrantyConversion', label: 'Warranty Conv.', align: 'right' },
         { key: 'lostAmcConversion', label: 'Lost AMC Conv.', align: 'right' },
         { key: 'lostWarrantyConversion', label: 'Lost Warranty Conv.', align: 'right' },
-    ];
-
-    const contractColumns = [
-        { key: 'name', label: 'Contract ID', bold: true },
-        { key: 'customer_name', label: 'Customer' },
-        { key: 'branch', label: 'Branch' },
-        { key: 'date', label: 'Date' },
-        { key: 'amount', label: 'Amount', align: 'right', render: v => formatCurrency(v) },
-        { key: 'deal_type', label: 'Deal Type' },
-        { key: 'custom_contract_status', label: 'Status' },
+        { key: 'others', label: 'Others', align: 'right' },
     ];
 
     if (isLoading) {
@@ -353,19 +328,15 @@ export default function Manager() {
                 <div className="mb-6">
                     <Breadcrumb
                         items={[
-                            ...(regionId ? [{ label: regionId, href: `/region/${regionId}` }] : []),
+                            { label: 'Home', href: '/' },
+                            { label: regionId, href: `/region/${regionId}` },
                             { label: managerName }
                         ]}
                     />
                     <h1 className="text-3xl font-bold" style={{ color: COLORS.text.primary }}>
                         Area Manager Dashboard
                     </h1>
-                    <p className="text-gray-600 mt-1">Performance overview for {managerName}</p>
-                    {managerData.branchDetails.length > 0 && (
-                        <p className="text-sm text-gray-500 mt-1">
-                            Managing: {managerData.branchDetails.map(b => b.branchName).join(', ')}
-                        </p>
-                    )}
+                    <p className="text-gray-600 mt-1">{managerName} - {regionId}</p>
                 </div>
 
                 <FilterPanel
@@ -374,7 +345,10 @@ export default function Manager() {
                     onApply={handleApplyFilters}
                     onReset={handleResetFilters}
                     additionalOptions={{
-                        branches: managerData.branchDetails
+                        branches: managerData.branchDetails.map(b => ({
+                            value: b.branchId,
+                            label: b.branchName
+                        }))
                     }}
                 />
 
@@ -394,13 +368,12 @@ export default function Manager() {
                     <KPICard
                         title="Total Customers"
                         value={managerData.summary.totalCustomers.toLocaleString()}
-                        subtitle={`${managerData.summary.totalBranches} Branches`}
                         icon={Users}
                     />
                     <KPICard
-                        title="Total Opportunities"
+                        title="Active Opportunities"
                         value={managerData.summary.totalDeals.toLocaleString()}
-                        subtitle={`Quotes: ${managerData.summary.totalQuotations.toLocaleString()}`}
+                        subtitle={`Branches: ${managerData.summary.totalBranches}`}
                         icon={Target}
                     />
                 </div>
@@ -408,13 +381,14 @@ export default function Manager() {
                 {chartData && (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                         <StackedBarChart
-                            data={chartData.revenueByBranch}
-                            title="Revenue by Branch (Deal Type)"
+                            data={chartData.revenueByBranchStacked}
+                            title="Revenue by Branch"
                             stacks={[
                                 { dataKey: 'amcRenewal', name: 'AMC Renewal', color: '#10b981' },
                                 { dataKey: 'warrantyConversion', name: 'Warranty Conversion', color: '#3b82f6' },
                                 { dataKey: 'lostAmcConversion', name: 'Lost AMC Conversion', color: '#f59e0b' },
                                 { dataKey: 'lostWarrantyConversion', name: 'Lost Warranty Conversion', color: '#ef4444' },
+                                { dataKey: 'others', name: 'Others', color: '#9ca3af' }
                             ]}
                             yAxisFormatter={formatCurrencyCompact}
                             valueFormatter={formatCurrency}
@@ -422,12 +396,13 @@ export default function Manager() {
 
                         <StackedBarChart
                             data={chartData.contractsByBranchStacked}
-                            title="Contracts by Branch (Deal Type)"
+                            title="Contracts by Branch"
                             stacks={[
                                 { dataKey: 'amcRenewal', name: 'AMC Renewal', color: '#10b981' },
                                 { dataKey: 'warrantyConversion', name: 'Warranty Conversion', color: '#3b82f6' },
                                 { dataKey: 'lostAmcConversion', name: 'Lost AMC Conversion', color: '#f59e0b' },
                                 { dataKey: 'lostWarrantyConversion', name: 'Lost Warranty Conversion', color: '#ef4444' },
+                                { dataKey: 'others', name: 'Others', color: '#9ca3af' }
                             ]}
                         />
 
@@ -435,17 +410,26 @@ export default function Manager() {
                             data={chartData.contractTimeline}
                             title="Contract Timeline"
                             xAxisTitle="Month"
-                            yAxisTitle="Revenue / Count"
+                            yAxisTitleLeft="Contracts"
+                            yAxisTitleRight="Revenue (₹)"
+                            yAxisFormatterLeft={formatNumberCompact}
+                            yAxisFormatterRight={formatCurrencyCompact
+                            }
                             valueFormatter={formatCurrencyCompact}
                             areas={[
-                                { dataKey: 'count', name: 'Count', color: COLORS.chart?.[0] || '#8b5cf6' },
-                                { dataKey: 'revenue', name: 'Revenue', color: COLORS.chart?.[1] || '#06b6d4' }
+                                {
+                                    dataKey: "count",
+                                    name: "Count",
+                                    color: COLORS.chart?.[0] || "#8b5cf6",
+                                    yAxisId: "left"
+                                },
+                                {
+                                    dataKey: "revenue",
+                                    name: "Revenue",
+                                    color: COLORS.chart?.[1] || "#06b6d4",
+                                    yAxisId: "right"
+                                }
                             ]}
-                        />
-
-                        <PieChart
-                            data={chartData.dealTypeBreakdown}
-                            title="Deal Type Breakdown"
                         />
 
                         <DonutChart
@@ -461,28 +445,18 @@ export default function Manager() {
                     </div>
                 )}
 
-                {/* Branches Summary Table */}
                 <DataTable
                     title="Branches Overview"
                     columns={branchColumns}
-                    data={branchSummary}
+                    data={sortedBranches}
+                    sortConfig={sortConfig}
+                    onSort={handleSort}
                     onRowClick={(row) => handleBranchClick(row.branchId)}
                     actionButton={{
                         label: 'View Details',
                         onClick: (row) => handleBranchClick(row.branchId)
                     }}
                 />
-
-                {/* Contracts Table */}
-                <div className="mt-6">
-                    <DataTable
-                        title="Contracts Overview"
-                        columns={contractColumns}
-                        data={sortedContracts}
-                        sortConfig={sortConfig}
-                        onSort={handleSort}
-                    />
-                </div>
             </div>
         </div>
     );

@@ -271,7 +271,7 @@ export default function Homepage() {
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                         <StackedBarChart
                             data={chartData.revenueByRegionStacked}
-                            title="Revenue by Region (Deal Type Breakdown)"
+                            title="Revenue by Region"
                             stacks={[
                                 { dataKey: 'amcRenewal', name: 'AMC Renewal', color: '#10b981' },
                                 { dataKey: 'warrantyConversion', name: 'Warranty Conversion', color: '#3b82f6' },
@@ -286,7 +286,7 @@ export default function Homepage() {
 
                         <StackedBarChart
                             data={chartData.contractsByRegionStacked}
-                            title="Contracts by Region (Deal Type Breakdown)"
+                            title="Contracts by Region"
                             stacks={[
                                 { dataKey: 'amcRenewal', name: 'AMC Renewal', color: '#10b981' },
                                 { dataKey: 'warrantyConversion', name: 'Warranty Conversion', color: '#3b82f6' },

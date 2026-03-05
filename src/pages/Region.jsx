@@ -7,7 +7,7 @@ import { useFilters } from '../contexts/FilterContext';
 import { COLORS } from '../constants/theme';
 import KPICard from '../components/common/KPICard';
 import FilterPanel from '../components/common/FilterPanel';
-import StackedBarChart, { formatCurrencyCompact } from '../components/charts/StackedBarChart';
+import StackedBarChart, { formatCurrencyCompact, formatNumberCompact } from '../components/charts/StackedBarChart';
 import DonutChart from '../components/charts/DonutChart';
 import AreaChart from '../components/charts/AreaChart';
 import Breadcrumb from '../components/common/BreadCrumb';
@@ -451,7 +451,7 @@ export default function Region() {
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                         <StackedBarChart
                             data={chartData.revenueByBranchStacked}
-                            title="Revenue by Branch (Deal Type Breakdown)"
+                            title="Revenue by Branch"
                             stacks={[
                                 { dataKey: 'amcRenewal', name: 'AMC Renewal', color: '#10b981' },
                                 { dataKey: 'warrantyConversion', name: 'Warranty Conversion', color: '#3b82f6' },
@@ -465,7 +465,7 @@ export default function Region() {
 
                         <StackedBarChart
                             data={chartData.contractsByBranchStacked}
-                            title="Contracts by Branch (Deal Type Breakdown)"
+                            title="Contracts by Branch"
                             stacks={[
                                 { dataKey: 'amcRenewal', name: 'AMC Renewal', color: '#10b981' },
                                 { dataKey: 'warrantyConversion', name: 'Warranty Conversion', color: '#3b82f6' },
@@ -478,9 +478,26 @@ export default function Region() {
                         <AreaChart
                             data={chartData.contractTimeline}
                             title="Contract Timeline"
+                            xAxisTitle="Month"
+                            yAxisTitleLeft="Contracts"
+                            yAxisTitleRight="Revenue (₹)"
+                            yAxisFormatterLeft={formatNumberCompact}
+                            yAxisFormatterRight={formatCurrencyCompact
+                            }
+                            valueFormatter={formatNumberCompact}
                             areas={[
-                                { dataKey: 'count', name: 'Count', color: COLORS.chart?.[0] || '#8b5cf6' },
-                                { dataKey: 'revenue', name: 'Revenue', color: COLORS.chart?.[1] || '#06b6d4' }
+                                {
+                                    dataKey: "count",
+                                    name: "Count",
+                                    color: COLORS.chart?.[0] || "#8b5cf6",
+                                    yAxisId: "left"
+                                },
+                                {
+                                    dataKey: "revenue",
+                                    name: "Revenue",
+                                    color: COLORS.chart?.[1] || "#06b6d4",
+                                    yAxisId: "right"
+                                }
                             ]}
                         />
 

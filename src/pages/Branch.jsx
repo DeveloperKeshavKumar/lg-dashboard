@@ -10,7 +10,7 @@ import FilterPanel from '../components/common/FilterPanel';
 import DonutChart from '../components/charts/DonutChart';
 import PieChart from '../components/charts/PieChart';
 import AreaChart from '../components/charts/AreaChart';
-import StackedBarChart, { formatCurrencyCompact } from '../components/charts/StackedBarChart';
+import StackedBarChart, { formatCurrencyCompact, formatNumberCompact } from '../components/charts/StackedBarChart';
 import Breadcrumb from '../components/common/BreadCrumb';
 import DataTable from '../components/common/DataTable';
 
@@ -359,9 +359,26 @@ export default function Branch() {
                         <AreaChart
                             data={chartData.contractTimeline}
                             title="Contract Timeline"
+                            xAxisTitle="Month"
+                            yAxisTitleLeft="Contracts"
+                            yAxisTitleRight="Revenue (₹)"
+                            yAxisFormatterLeft={formatNumberCompact}
+                            yAxisFormatterRight={formatCurrencyCompact
+                            }
+                            valueFormatter={formatCurrencyCompact}
                             areas={[
-                                { dataKey: 'count', name: 'Count', color: COLORS.chart?.[0] || '#8b5cf6' },
-                                { dataKey: 'revenue', name: 'Revenue', color: COLORS.chart?.[1] || '#06b6d4' }
+                                {
+                                    dataKey: "count",
+                                    name: "Count",
+                                    color: COLORS.chart?.[0] || "#8b5cf6",
+                                    yAxisId: "left"
+                                },
+                                {
+                                    dataKey: "revenue",
+                                    name: "Revenue",
+                                    color: COLORS.chart?.[1] || "#06b6d4",
+                                    yAxisId: "right"
+                                }
                             ]}
                         />
 

@@ -20,17 +20,22 @@ export default function AreaChart({
     showLegend = true,
     valueFormatter = (v) => v,
     xAxisTitle = '',
-    yAxisTitle = ''
+    yAxisTitleLeft = '',
+    yAxisTitleRight = '',
+    yAxisFormatterLeft = (v) => v,
+    yAxisFormatterRight = (v) => v
 }) {
+
     const [activeKey, setActiveKey] = useState(null);
 
     const handleLegendClick = (key) => {
-        setActiveKey(prev => (prev === key ? null : key));
+        setActiveKey(prev => prev === key ? null : key);
     };
 
     const renderLegend = ({ payload }) => (
         <div className="flex flex-wrap gap-3 justify-center mt-4">
             {payload.map((entry, index) => {
+
                 const dim = activeKey && activeKey !== entry.dataKey;
 
                 return (
@@ -54,13 +59,12 @@ export default function AreaChart({
     );
 
     const CustomTooltip = ({ active, payload, label }) => {
+
         if (!active || !payload?.length) return null;
 
         return (
             <div className="bg-white px-4 py-3 rounded-lg shadow-lg border border-gray-200">
-                <p className="text-sm font-semibold text-gray-800 mb-2">
-                    {label}
-                </p>
+                <p className="text-sm font-semibold text-gray-800 mb-2">{label}</p>
 
                 {payload.map((entry, index) => (
                     <div key={index} className="flex items-center gap-2 mb-1">
@@ -69,7 +73,7 @@ export default function AreaChart({
                             style={{ backgroundColor: entry.color }}
                         />
                         <span className="text-sm text-gray-600">
-                            {entry.name}: {valueFormatter(entry.value)}
+                            {entry.name}: {valueFormatter(entry.value, entry.dataKey)}
                         </span>
                     </div>
                 ))}
@@ -79,6 +83,7 @@ export default function AreaChart({
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 hover:shadow-md transition">
+
             <h3 className="text-lg font-semibold text-gray-800 mb-4">
                 {title}
             </h3>
@@ -88,11 +93,13 @@ export default function AreaChart({
                     No data available
                 </div>
             ) : (
+
                 <ResponsiveContainer width="100%" height={height}>
                     <RechartsAreaChart
                         data={data}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                        margin={{ top: 20, right: 40, left: 10, bottom: 20 }}
                     >
+
                         <defs>
                             {areas.map((area, i) => (
                                 <linearGradient
@@ -140,18 +147,38 @@ export default function AreaChart({
                         </XAxis>
 
                         <YAxis
+                            yAxisId="left"
                             fontSize={12}
                             stroke={COLORS.text.secondary}
-                            tickFormatter={valueFormatter}
                             tickLine={false}
                             axisLine={{ stroke: COLORS.border }}
+                            tickFormatter={yAxisFormatterLeft}
                         >
-                            {yAxisTitle && (
+                            {yAxisTitleLeft && (
                                 <Label
-                                    value={yAxisTitle}
+                                    value={yAxisTitleLeft}
                                     angle={-90}
                                     position="insideLeft"
-                                    style={{ textAnchor: 'middle', fill: COLORS.text.secondary, fontSize: 12 }}
+                                    style={{ textAnchor: 'middle', fill: COLORS.text.secondary }}
+                                />
+                            )}
+                        </YAxis>
+
+                        <YAxis
+                            yAxisId="right"
+                            orientation="right"
+                            fontSize={12}
+                            stroke={COLORS.text.secondary}
+                            tickLine={false}
+                            axisLine={{ stroke: COLORS.border }}
+                            tickFormatter={yAxisFormatterRight}
+                        >
+                            {yAxisTitleRight && (
+                                <Label
+                                    value={yAxisTitleRight}
+                                    angle={90}
+                                    position="insideRight"
+                                    style={{ textAnchor: 'middle', fill: COLORS.text.secondary }}
                                 />
                             )}
                         </YAxis>
@@ -161,6 +188,7 @@ export default function AreaChart({
                         {showLegend && <Legend content={renderLegend} />}
 
                         {areas.map((area, i) => (
+
                             <Area
                                 key={area.dataKey}
                                 type={CHART_CONFIG.curveType}
@@ -170,12 +198,17 @@ export default function AreaChart({
                                 fill={`url(#color${area.dataKey})`}
                                 strokeWidth={2}
                                 animationDuration={CHART_CONFIG.animationDuration}
+                                yAxisId={area.yAxisId || 'left'}
                                 opacity={activeKey && activeKey !== area.dataKey ? 0.25 : 1}
                             />
+
                         ))}
+
                     </RechartsAreaChart>
                 </ResponsiveContainer>
+
             )}
+
         </div>
     );
 }
