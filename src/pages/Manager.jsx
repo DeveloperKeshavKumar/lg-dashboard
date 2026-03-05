@@ -7,7 +7,7 @@ import { useFilters } from '../contexts/FilterContext';
 import { COLORS } from '../constants/theme';
 import KPICard from '../components/common/KPICard';
 import FilterPanel from '../components/common/FilterPanel';
-import StackedBarChart, { formatCurrencyCompact } from '../components/charts/StackedBarChart';
+import StackedBarChart, { formatCurrencyCompact, formatNumberCompact } from '../components/charts/StackedBarChart';
 import DonutChart from '../components/charts/DonutChart';
 import AreaChart from '../components/charts/AreaChart';
 import Breadcrumb from '../components/common/BreadCrumb';
@@ -432,10 +432,10 @@ export default function Manager() {
                             ]}
                         />
 
-                        <DonutChart
+                        {/* <DonutChart
                             data={chartData.dealStatus}
                             title="Opportunity Status Distribution"
-                        />
+                        /> */}
 
                         <DonutChart
                             data={chartData.revenueByVertical}

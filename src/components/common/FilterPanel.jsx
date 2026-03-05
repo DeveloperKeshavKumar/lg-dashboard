@@ -144,42 +144,44 @@ export default function FilterPanel({
                 </div>
 
                 {/* Branch Filter (conditionally shown) */}
-                {branches.length > 0 ? (
-                    <div>
-                        <label className="text-sm font-medium mb-2 block" style={{ color: COLORS.text.secondary }}>
-                            Branch
-                        </label>
-                        <select
-                            className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 transition-all"
-                            style={{ borderColor: COLORS.border }}
-                            value={filters.branch || ''}
-                            onChange={(e) => handleFilterChange('branch', e.target.value)}
-                        >
-                            <option value="">All Branches</option>
-                            {branches.map(branch => (
-                                <option key={branch.branchId} value={branch.branchId}>
-                                    {branch.branchName}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                ) : (
-                    /* Apply Button */
-                    <div className="flex items-end">
-                        <button
-                            onClick={onApply}
-                            disabled={isLoading}
-                            className="w-full px-4 py-2 text-sm font-medium text-white rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-                            style={{ backgroundColor: COLORS.primary }}
-                        >
-                            {isLoading ? 'Loading...' : 'Apply Filters'}
-                        </button>
-                    </div>
-                )}
+                {
+                    // branches.length > 0 ? (
+                    //     <div>
+                    //         <label className="text-sm font-medium mb-2 block" style={{ color: COLORS.text.secondary }}>
+                    //             Branch
+                    //         </label>
+                    //         <select
+                    //             className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 transition-all"
+                    //             style={{ borderColor: COLORS.border }}
+                    //             value={filters.branch || ''}
+                    //             onChange={(e) => handleFilterChange('branch', e.target.value)}
+                    //         >
+                    //             <option value="">All Branches</option>
+                    //             {branches.map(branch => (
+                    //                 <option key={branch.branchId} value={branch.branchId}>
+                    //                     {branch.branchName}
+                    //                 </option>
+                    //             ))}
+                    //         </select>
+                    //     </div>
+                    // ) : (
+                    //     /* Apply Button */
+                    // )
+                }
+                <div className="flex items-end">
+                    <button
+                        onClick={onApply}
+                        disabled={isLoading}
+                        className="w-full px-4 py-2 text-sm font-medium text-white rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ backgroundColor: COLORS.primary }}
+                    >
+                        {isLoading ? 'Loading...' : 'Apply Filters'}
+                    </button>
+                </div>
             </div>
 
             {/* Apply Button when branch filter is shown */}
-            {branches.length > 0 && (
+            {/* {branches.length > 0 && (
                 <div className="mt-4">
                     <button
                         onClick={onApply}
@@ -190,7 +192,7 @@ export default function FilterPanel({
                         {isLoading ? 'Loading...' : 'Apply Filters'}
                     </button>
                 </div>
-            )}
+            )} */}
         </div>
     );
 }
