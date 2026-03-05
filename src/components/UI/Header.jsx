@@ -13,7 +13,7 @@ export default function Header() {
                         className="flex flex-col items-center cursor-pointer"
                         onClick={() => navigate('/')}
                     >
-                        <span className="-mb-1 text-xs text-black font-semibold">LG Electronics HVAC Service & Maintenance</span>
+                        <span className="-mb-1 text-[10px] text-black font-semibold">LG Electronics HVAC Service & Maintenance</span>
                         <h1 className="text-4xl font-bold" style={{ color: COLORS.primary }}>
                             Hi-M.Solutek
                         </h1>
