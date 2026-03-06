@@ -274,7 +274,6 @@ export default function Branch() {
                 <div className="mb-6">
                     <Breadcrumb
                         items={[
-                            { label: 'Home', href: '/' },
                             ...(data?.branchInfo?.region ? [{ label: data.branchInfo.region, href: `/region/${data.branchInfo.region}` }] : []),
                             { label: data?.branchInfo?.branch_name || branchId }
                         ]}

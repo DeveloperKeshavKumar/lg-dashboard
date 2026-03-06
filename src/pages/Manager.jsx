@@ -328,7 +328,6 @@ export default function Manager() {
                 <div className="mb-6">
                     <Breadcrumb
                         items={[
-                            { label: 'Home', href: '/' },
                             { label: regionId, href: `/region/${regionId}` },
                             { label: managerName }
                         ]}
