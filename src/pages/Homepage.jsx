@@ -1,7 +1,7 @@
 // src/pages/Homepage.jsx
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DollarSign, FileText, Users, Target, ChevronDown, ChevronRight } from 'lucide-react';
+import { DollarSign, FileText, Users, Target } from 'lucide-react';
 import { useCountryData, formatCurrency } from '../hooks/useFrappeData';
 import { useFilters } from '../contexts/FilterContext';
 import { COLORS } from '../constants/theme';
@@ -10,7 +10,7 @@ import FilterPanel from '../components/common/FilterPanel';
 import StackedBarChart, { formatCurrencyCompact, formatNumberCompact } from '../components/charts/StackedBarChart';
 import SmoothLineChart from '../components/charts/SmoothLineChart';
 import PieChart from '../components/charts/PieChart';
-import DataTable from '../components/common/DataTable';
+import DataTable from '../components/common/DataTable2';
 import Breadcrumb from '@/components/common/BreadCrumb';
 
 export default function Homepage() {
@@ -64,15 +64,13 @@ export default function Homepage() {
     };
 
     // Chart data calculations
-    // src/pages/Homepage.jsx - Update chartData useMemo
-
     const chartData = useMemo(() => {
         if (!data) return null;
 
         const { rawData } = data;
 
-        // Only show parent regions and standalone regions in charts (not sub-regions)
-        const chartRegions = data.regions.filter(r => r.isParent || !r.parentRegionId);
+        // Show ALL regions in charts (parent regions, sub-regions, and standalone regions)
+        const chartRegions = data.regions;
 
         const revenueByVertical = () => {
             const map = new Map();
@@ -100,26 +98,28 @@ export default function Homepage() {
                 .map(([name, d]) => ({ name, count: d.count, revenue: d.revenue }));
         };
 
-        // Initialize chart data with all categories including Others
-        const contractsByRegionStacked = chartRegions.map(r => ({
-            name: r.regionName,
-            regionId: r.regionId,
-            amcRenewal: 0,
-            warrantyConversion: 0,
-            lostAmcConversion: 0,
-            lostWarrantyConversion: 0,
-            others: 0
-        }));
+        // Initialize chart data - use data already aggregated in hook
+        const contractsByRegionStacked = chartRegions
+            .filter(r => !r.isParent) // Only show leaf regions in stacked charts
+            .map(r => ({
+                name: r.regionName,
+                regionId: r.regionId,
+                amcRenewal: r.amcRenewal || 0,
+                warrantyConversion: r.warrantyConversion || 0,
+                lostAmcConversion: r.lostAmcConversion || 0,
+                lostWarrantyConversion: r.lostWarrantyConversion || 0,
+            }));
 
-        const revenueByRegionStacked = chartRegions.map(r => ({
-            name: r.regionName,
-            regionId: r.regionId,
-            amcRenewal: 0,
-            warrantyConversion: 0,
-            lostAmcConversion: 0,
-            lostWarrantyConversion: 0,
-            others: 0
-        }));
+        const revenueByRegionStacked = chartRegions
+            .filter(r => !r.isParent) // Only show leaf regions in stacked charts
+            .map(r => ({
+                name: r.regionName,
+                regionId: r.regionId,
+                amcRenewal: 0,
+                warrantyConversion: 0,
+                lostAmcConversion: 0,
+                lostWarrantyConversion: 0,
+            }));
 
         const REGION_HIERARCHY = {
             'EAST': ['EAST-1', 'EAST-2'],
@@ -137,29 +137,19 @@ export default function Homepage() {
             return 'others';
         };
 
-        // Aggregate contracts for revenue chart
+        // Aggregate contracts for revenue chart (only for leaf regions)
         rawData.contracts.forEach(contract => {
-            const region = chartRegions.find(r => {
-                if (r.isParent) {
-                    return REGION_HIERARCHY[r.regionId]?.includes(contract.region);
-                } else {
-                    return r.regionId === contract.region;
-                }
-            });
+            const region = chartRegions.find(r => r.regionId === contract.region && !r.isParent);
 
             if (region) {
                 const revenueRegion = revenueByRegionStacked.find(cr => cr.regionId === region.regionId);
-                const contractRegion = contractsByRegionStacked.find(cr => cr.regionId === region.regionId);
 
-                if (revenueRegion && contractRegion) {
+                if (revenueRegion) {
                     const amount = parseFloat(contract.amount || 0);
                     const category = categorizeDealType(contract.deal_type);
 
                     // Add to revenue chart
                     revenueRegion[category] += amount;
-
-                    // Add to contracts chart
-                    contractRegion[category] += 1;
                 }
             }
         });
@@ -172,19 +162,35 @@ export default function Homepage() {
         };
     }, [data]);
 
-    // Sorted regions
+    // Sorted regions - exclude child regions from top-level, they'll appear under parents
     const sortedRegions = useMemo(() => {
         if (!data) return [];
 
-        let result = [...data.regions];
+        // Filter out child regions - they'll be shown under their parents
+        let topLevelRegions = data.regions.filter(r => !r.parentRegionId);
 
         if (sortConfig.key) {
-            result.sort((a, b) => {
+            topLevelRegions.sort((a, b) => {
                 if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
                 if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
                 return 0;
             });
         }
+
+        // Build final array with parent regions followed by their children
+        const result = [];
+        topLevelRegions.forEach(region => {
+            result.push(region);
+            // Add children if this is a parent
+            if (region.isParent && region.subRegions) {
+                region.subRegions.forEach(subRegionId => {
+                    const subRegion = data.regions.find(r => r.regionId === subRegionId);
+                    if (subRegion) {
+                        result.push(subRegion);
+                    }
+                });
+            }
+        });
 
         return result;
     }, [data, sortConfig]);
@@ -277,7 +283,6 @@ export default function Homepage() {
                                 { dataKey: 'warrantyConversion', name: 'Warranty Conversion', color: '#3b82f6' },
                                 { dataKey: 'lostAmcConversion', name: 'Lost AMC Conversion', color: '#f59e0b' },
                                 { dataKey: 'lostWarrantyConversion', name: 'Lost Warranty Conversion', color: '#ef4444' },
-                                // { dataKey: 'others', name: 'Others', color: '#9ca3af' }
                             ]}
                             onBarClick={handleStackClick}
                             yAxisFormatter={formatCurrencyCompact}
@@ -292,7 +297,6 @@ export default function Homepage() {
                                 { dataKey: 'warrantyConversion', name: 'Warranty Conversion', color: '#3b82f6' },
                                 { dataKey: 'lostAmcConversion', name: 'Lost AMC Conversion', color: '#f59e0b' },
                                 { dataKey: 'lostWarrantyConversion', name: 'Lost Warranty Conversion', color: '#ef4444' },
-                                // { dataKey: 'others', name: 'Others', color: '#9ca3af' }
                             ]}
                             onBarClick={handleStackClick}
                         />

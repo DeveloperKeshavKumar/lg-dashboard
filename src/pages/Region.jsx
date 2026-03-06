@@ -11,7 +11,12 @@ import StackedBarChart, { formatCurrencyCompact, formatNumberCompact } from '../
 import DonutChart from '../components/charts/DonutChart';
 import AreaChart from '../components/charts/AreaChart';
 import Breadcrumb from '../components/common/BreadCrumb';
-import DataTable from '../components/common/DataTable';
+import DataTable from '../components/common/DataTable2';
+
+const REGION_HIERARCHY = {
+    'EAST': ['EAST-1', 'EAST-2'],
+    'NORTH': ['NORTH-1', 'NORTH-2']
+};
 
 export default function Region() {
     const { regionId } = useParams();
@@ -28,6 +33,12 @@ export default function Region() {
     }, [globalFilters]);
 
     const { data, isLoading, error } = useRegionData(regionId, globalFilters);
+
+    // Check if this is a parent region
+    const isParentRegion = REGION_HIERARCHY[regionId] !== undefined;
+    const displayRegionName = isParentRegion
+        ? `${regionId} (${REGION_HIERARCHY[regionId].join(', ')})`
+        : regionId;
 
     const handleApplyFilters = () => {
         updateFilters(localFilters);
@@ -51,7 +62,7 @@ export default function Region() {
             state: {
                 regionId,
                 managerName,
-                branchHeadId: managerId // This is the branch_head ID
+                branchHeadId: managerId
             }
         });
     };
@@ -264,8 +275,8 @@ export default function Region() {
 
         // First, create manager entries from branches (branch_head is the area manager)
         data.branches.forEach(branch => {
-            const branchHeadId = branch.branchHead; // This is branch_head field
-            const branchHeadName = branch.branchHead; // You might have branch_head_name field
+            const branchHeadId = branch.branchHead;
+            const branchHeadName = branch.branchHead;
 
             if (!branchHeadId || branchHeadId === 'Administrator') return;
 
@@ -286,7 +297,6 @@ export default function Region() {
                 });
             }
 
-            // Add this branch to the manager's branch list
             const manager = managerMap.get(branchHeadId);
             manager.branches.add(branch.branchId);
             manager.branchNames.add(branch.branchName);
@@ -296,7 +306,6 @@ export default function Region() {
         data.rawData.contracts.forEach(contract => {
             if (!contract.branch) return;
 
-            // Find which manager owns this branch
             const branch = data.branches.find(b => b.branchId === contract.branch);
             if (!branch || !branch.branchHead) return;
 
@@ -404,14 +413,19 @@ export default function Region() {
                 <div className="mb-6">
                     <Breadcrumb
                         items={[
-                            { label: 'Region', href: -1 },
-                            { label: regionId }
+                            { label: 'Home', href: '/' },
+                            { label: displayRegionName }
                         ]}
                     />
                     <h1 className="text-3xl font-bold" style={{ color: COLORS.text.primary }}>
-                        Region Dashboard
+                        {displayRegionName} Dashboard
                     </h1>
-                    <p className="text-gray-600 mt-1">Detailed view of {regionId}</p>
+                    <p className="text-gray-600 mt-1">
+                        {isParentRegion
+                            ? `Aggregated view of ${REGION_HIERARCHY[regionId].join(' and ')}`
+                            : `Detailed view of ${regionId}`
+                        }
+                    </p>
                 </div>
 
                 <FilterPanel
@@ -482,8 +496,7 @@ export default function Region() {
                             yAxisTitleLeft="Contracts"
                             yAxisTitleRight="Revenue (₹)"
                             yAxisFormatterLeft={formatNumberCompact}
-                            yAxisFormatterRight={formatCurrencyCompact
-                            }
+                            yAxisFormatterRight={formatCurrencyCompact}
                             valueFormatter={formatNumberCompact}
                             areas={[
                                 {
@@ -500,11 +513,6 @@ export default function Region() {
                                 }
                             ]}
                         />
-
-                        {/* <DonutChart
-                            data={chartData.dealStatus}
-                            title="Opportunity Status Distribution"
-                        /> */}
 
                         <DonutChart
                             data={chartData.revenueByVertical}

@@ -25,30 +25,17 @@ export default function DataTable({
 
     // Organize data into parent-child structure
     const organizedData = React.useMemo(() => {
-        const result = [];
-        const processed = new Set();
+        // Check if data is already organized (has parent-child structure)
+        const hasParentChild = data.some(row => row.isParent || row.parentRegionId);
 
-        data.forEach(row => {
-            // Skip if already processed as a child
-            if (processed.has(row.regionId)) return;
+        if (!hasParentChild) {
+            // Data is flat, return as-is
+            return data;
+        }
 
-            // Add parent row
-            result.push(row);
-            processed.add(row.regionId);
-
-            // If this is a parent with sub-regions, add children
-            if (row.isParent && row.subRegions) {
-                row.subRegions.forEach(subRegionId => {
-                    const subRegion = data.find(r => r.regionId === subRegionId);
-                    if (subRegion) {
-                        result.push({ ...subRegion, isChild: true, parentId: row.regionId });
-                        processed.add(subRegionId);
-                    }
-                });
-            }
-        });
-
-        return result;
+        // Data already has hierarchy, just return it
+        // The parent component (Homepage) already organized it correctly
+        return data;
     }, [data]);
 
     return (
@@ -96,8 +83,17 @@ export default function DataTable({
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                         {organizedData.map((row, rowIndex) => {
+                            // Determine if this is a child row
+                            const isChildRow = row.parentRegionId && !row.isParent;
+
+                            // Find parent region if this is a child
+                            let parentRow = null;
+                            if (isChildRow) {
+                                parentRow = organizedData.find(r => r.regionId === row.parentRegionId && r.isParent);
+                            }
+
                             // Skip child rows if parent is not expanded
-                            if (row.isChild && !expandedRows.has(row.parentId)) {
+                            if (isChildRow && parentRow && !expandedRows.has(parentRow.regionId)) {
                                 return null;
                             }
 
@@ -107,10 +103,10 @@ export default function DataTable({
                             return (
                                 <tr
                                     key={rowIndex}
-                                    className={`hover:bg-gray-50 transition ${onRowClick && !row.isParent ? 'cursor-pointer' : ''
-                                        } ${row.isChild ? 'bg-gray-50' : ''}`}
+                                    className={`hover:bg-gray-50 transition ${onRowClick ? 'cursor-pointer' : ''
+                                        } ${isChildRow ? 'bg-gray-50' : ''}`}
                                     onClick={() => {
-                                        if (!row.isParent && onRowClick) {
+                                        if (onRowClick) {
                                             onRowClick(row);
                                         }
                                     }}
@@ -124,7 +120,7 @@ export default function DataTable({
                                                 }`}
                                         >
                                             {colIndex === 0 ? (
-                                                <div className={`flex items-center gap-2 ${row.isChild ? 'pl-8' : ''}`}>
+                                                <div className={`flex items-center gap-2 ${isChildRow ? 'pl-8' : ''}`}>
                                                     {hasChildren && (
                                                         <button
                                                             onClick={(e) => {
@@ -151,18 +147,16 @@ export default function DataTable({
                                     ))}
                                     {actionButton && (
                                         <td className="px-6 py-4 whitespace-nowrap text-center text-sm">
-                                            {!row.isParent && (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        actionButton.onClick(row);
-                                                    }}
-                                                    className="font-medium hover:opacity-80 transition"
-                                                    style={{ color: COLORS.primary }}
-                                                >
-                                                    {actionButton.label} →
-                                                </button>
-                                            )}
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    actionButton.onClick(row);
+                                                }}
+                                                className="font-medium hover:opacity-80 transition"
+                                                style={{ color: COLORS.primary }}
+                                            >
+                                                {actionButton.label} →
+                                            </button>
                                         </td>
                                     )}
                                 </tr>

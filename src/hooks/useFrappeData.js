@@ -7,6 +7,11 @@ const REGION_GROUPS = {
     "EAST": ["EAST", "EAST-1", "EAST-2"],
 };
 
+const REGION_HIERARCHY = {
+    'EAST': ['EAST-1', 'EAST-2'],
+    'NORTH': ['NORTH-1', 'NORTH-2']
+};
+
 /**
  * Custom hook to fetch country-level data with filters
  */
@@ -109,7 +114,13 @@ export function useCountryData(filters = {}) {
         // Aggregate by region
         const regionMap = new Map();
 
+        // Only add regions that are NOT parent regions (EAST, NORTH)
         regions.forEach(region => {
+            // Skip if this is a parent region ID (EAST or NORTH)
+            if (region.name === 'EAST' || region.name === 'NORTH') {
+                return;
+            }
+
             regionMap.set(region.name, {
                 regionId: region.name,
                 regionName: region.region_name,
@@ -124,11 +135,48 @@ export function useCountryData(filters = {}) {
                 customers: new Set(),
                 quotations: 0,
                 totalHP: 0,
+                isParent: false,
+                parentRegionId: null,
+            });
+        });
+
+        // Mark sub-regions and create VIRTUAL parent regions
+        Object.entries(REGION_HIERARCHY).forEach(([parentId, childIds]) => {
+            // Mark children with their parent
+            childIds.forEach(childId => {
+                if (regionMap.has(childId)) {
+                    regionMap.get(childId).parentRegionId = parentId;
+                }
+            });
+
+            // Create VIRTUAL parent region (NOT from database)
+            regionMap.set(parentId, {
+                regionId: parentId,
+                regionName: parentId,
+                regionHead: 'Multiple',
+                revenue: 0,
+                contracts: 0,
+                deals: 0,
+                amcRenewal: 0,
+                warrantyConversion: 0,
+                lostAmcConversion: 0,
+                lostWarrantyConversion: 0,
+                customers: new Set(),
+                quotations: 0,
+                totalHP: 0,
+                isParent: true,
+                parentRegionId: null,
+                subRegions: childIds,
             });
         });
 
         // Aggregate filtered contracts
         filteredContracts.forEach(contract => {
+            // Skip if contract.region is a parent region (EAST or NORTH)
+            if (contract.region === 'EAST' || contract.region === 'NORTH') {
+                return;
+            }
+
             if (contract.region && regionMap.has(contract.region)) {
                 const region = regionMap.get(contract.region);
                 region.revenue += parseFloat(contract.amount || 0);
@@ -144,20 +192,59 @@ export function useCountryData(filters = {}) {
                 if (contract.customer) {
                     region.customers.add(contract.customer);
                 }
+
+                // ONLY aggregate to parent if this is a sub-region (EAST-1, EAST-2, NORTH-1, NORTH-2)
+                if (region.parentRegionId && regionMap.has(region.parentRegionId)) {
+                    const parentRegion = regionMap.get(region.parentRegionId);
+                    parentRegion.revenue += parseFloat(contract.amount || 0);
+                    parentRegion.contracts += 1;
+                    parentRegion.totalHP += parseFloat(contract.total_hp || 0);
+
+                    if (type === "amc renewal") parentRegion.amcRenewal++;
+                    else if (type === "warranty conversion" || type === "warranty amc conversion") parentRegion.warrantyConversion++;
+                    else if (type === "lost amc conversion") parentRegion.lostAmcConversion++;
+                    else if (type === "lost warranty conversion") parentRegion.lostWarrantyConversion++;
+
+                    if (contract.customer) {
+                        parentRegion.customers.add(contract.customer);
+                    }
+                }
             }
         });
 
         // Aggregate deals
         filteredDeals.forEach(deal => {
+            // Skip if deal.region is a parent region
+            if (deal.region === 'EAST' || deal.region === 'NORTH') {
+                return;
+            }
+
             if (deal.region && regionMap.has(deal.region)) {
                 regionMap.get(deal.region).deals += 1;
+
+                // Also aggregate to parent
+                const region = regionMap.get(deal.region);
+                if (region.parentRegionId && regionMap.has(region.parentRegionId)) {
+                    regionMap.get(region.parentRegionId).deals += 1;
+                }
             }
         });
 
         // Aggregate quotations
         quotations.forEach(quote => {
+            // Skip if quote.region is a parent region
+            if (quote.region === 'EAST' || quote.region === 'NORTH') {
+                return;
+            }
+
             if (quote.region && regionMap.has(quote.region)) {
                 regionMap.get(quote.region).quotations += 1;
+
+                // Also aggregate to parent
+                const region = regionMap.get(quote.region);
+                if (region.parentRegionId && regionMap.has(region.parentRegionId)) {
+                    regionMap.get(region.parentRegionId).quotations += 1;
+                }
             }
         });
 
