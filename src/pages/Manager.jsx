@@ -1,7 +1,7 @@
 // src/pages/Manager.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { DollarSign, FileText, Users, Target } from 'lucide-react';
+import { IndianRupee, FileText, Users, Target } from 'lucide-react';
 import { useRegionData, formatCurrency } from '../hooks/useFrappeData';
 import { useFilters } from '../contexts/FilterContext';
 import { COLORS } from '../constants/theme';
@@ -356,7 +356,7 @@ export default function Manager() {
                         title="Total Revenue"
                         value={formatCurrency(managerData.summary.totalRevenue)}
                         subtitle={`Avg: ${formatCurrency(managerData.summary.avgContractValue)}`}
-                        icon={DollarSign}
+                        icon={IndianRupee}
                     />
                     <KPICard
                         title="Active Contracts"

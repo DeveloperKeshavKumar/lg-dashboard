@@ -23,19 +23,8 @@ export function useFilterOptions(additionalData = {}) {
 
     /**
      * Fetch Deal Types
-     */
-    const {
-        data: dealTypesData,
-        isLoading: dealTypesLoading,
-        error: dealTypesError
-    } = useFrappeGetDocList("CRM Deal Type", {
-        fields: ["name"],
-        limit: 0,
-        orderBy: {
-            field: "name",
-            order: "asc",
-        },
-    });
+    */
+    const filteredDealTypeData = ["AMC Renewal", "Warranty AMC Conversion", "Lost AMC Conversion", "Lost Warranty Conversion",];
 
     /**
      * Fetch Deal Statuses
@@ -64,12 +53,12 @@ export function useFilterOptions(additionalData = {}) {
             .map(status => ({ value: status, label: status }))
         : [];
 
-    const dealTypes = dealTypesData
-        ? dealTypesData.map(d => ({ value: d.name, label: d.name }))
+    const dealTypes = filteredDealTypeData.length > 0
+        ? filteredDealTypeData.map(d => ({ value: d, label: d }))
         : [];
 
-    const isLoading = industriesLoading || dealTypesLoading || statusesLoading;
-    const error = industriesError || dealTypesError || statusesError;
+    const isLoading = industriesLoading || statusesLoading;
+    const error = industriesError || statusesError;
 
     const branches = additionalData.branches || [];
 

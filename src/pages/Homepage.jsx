@@ -1,7 +1,7 @@
 // src/pages/Homepage.jsx
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DollarSign, FileText, Users, Target } from 'lucide-react';
+import { IndianRupee, FileText, Users, Target } from 'lucide-react';
 import { useCountryData, formatCurrency } from '../hooks/useFrappeData';
 import { useFilters } from '../contexts/FilterContext';
 import { COLORS } from '../constants/theme';
@@ -252,7 +252,7 @@ export default function Homepage() {
                         title="Total Revenue"
                         value={formatCurrency(data.summary.totalRevenue)}
                         subtitle={`Avg: ${formatCurrency(data.summary.avgContractValue)}`}
-                        icon={DollarSign}
+                        icon={IndianRupee}
                     />
                     <KPICard
                         title="Active Contracts"
