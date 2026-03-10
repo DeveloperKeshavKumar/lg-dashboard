@@ -12,9 +12,8 @@ export default function FilterPanel({
     onReset,
     additionalOptions = {}
 }) {
-    const { verticals, dealTypes, statuses, isLoading, error } = useFilterOptions();
 
-    // Get branches from additionalOptions
+    const { verticals, dealTypes, statuses, isLoading, error } = useFilterOptions();
     const branches = additionalOptions.branches || [];
 
     const handleFilterChange = useCallback((key, value) => {
@@ -29,170 +28,140 @@ export default function FilterPanel({
         }));
     }, [setFilters]);
 
-    const activeFilterCount = Object.entries(filters).filter(([key, value]) => {
-        if (key === 'startDate' || key === 'endDate') return false;
-        return Boolean(value);
-    }).length + ((filters.startDate || filters.endDate) ? 1 : 0);
+    const activeFilterCount =
+        Object.entries(filters).filter(([key, value]) => {
+            if (key === 'startDate' || key === 'endDate' || key === 'usePoDate') return false;
+            return Boolean(value);
+        }).length + ((filters.startDate || filters.endDate) ? 1 : 0);
 
     if (error) {
         return (
             <div className="bg-white rounded-lg shadow-md p-6 mb-6 border border-red-200">
-                <div className="flex items-center gap-2 text-red-600">
-                    <Filter className="h-5 w-5" />
-                    <span className="text-sm">Error loading filters: {error.message}</span>
-                </div>
+                Error loading filters: {error.message}
             </div>
         );
     }
 
+    // Determine grid columns based on whether branches are available
+    const gridCols = branches.length > 0 ? 'lg:grid-cols-7' : 'lg:grid-cols-6';
+
     return (
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6" style={{ borderColor: COLORS.border }}>
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+
             <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                     <Filter className="h-5 w-5" style={{ color: COLORS.primary }} />
-                    <h3 className="text-lg font-semibold" style={{ color: COLORS.text.primary }}>
-                        Filters
-                    </h3>
+                    <h3 className="text-lg font-semibold">Filters</h3>
+
                     {activeFilterCount > 0 && (
                         <span
                             className="text-xs px-2 py-0.5 rounded-full font-medium"
-                            style={{
-                                backgroundColor: COLORS.primary,
-                                color: 'white'
-                            }}
+                            style={{ backgroundColor: COLORS.primary, color: "white" }}
                         >
                             {activeFilterCount} active
                         </span>
                     )}
                 </div>
+
                 <button
                     onClick={onReset}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border hover:bg-gray-50 transition-colors"
-                    style={{
-                        borderColor: COLORS.border,
-                        color: COLORS.text.secondary
-                    }}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border hover:bg-gray-50"
+                    style={{ borderColor: COLORS.border }}
                 >
                     <X className="h-4 w-4" />
                     Clear All
                 </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                {/* Date Range */}
+            <div className={`grid grid-cols-1 md:grid-cols-2 ${gridCols} gap-4`}>
+
                 <DateRangeInput
                     startDate={filters.startDate}
                     endDate={filters.endDate}
                     onChange={handleDateRangeChange}
                 />
 
-                {/* Vertical */}
                 <div>
-                    <label className="text-sm font-medium mb-2 block" style={{ color: COLORS.text.secondary }}>
-                        Vertical
-                    </label>
+                    <label className="text-sm font-medium mb-2 block">Vertical</label>
                     <select
-                        className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 transition-all"
-                        style={{ borderColor: COLORS.border }}
                         value={filters.vertical || ''}
                         onChange={(e) => handleFilterChange('vertical', e.target.value)}
-                        disabled={isLoading}
+                        className="w-full px-3 py-2 border rounded-md text-sm"
                     >
-                        <option value="">{isLoading ? 'Loading...' : 'All Verticals'}</option>
-                        {verticals.map(vert => (
-                            <option key={vert.value} value={vert.value}>{vert.label}</option>
+                        <option value="">All Verticals</option>
+                        {verticals.map(v => (
+                            <option key={v.value} value={v.value}>{v.label}</option>
                         ))}
                     </select>
                 </div>
 
-                {/* Deal Type */}
                 <div>
-                    <label className="text-sm font-medium mb-2 block" style={{ color: COLORS.text.secondary }}>
-                        Contract Type
-                    </label>
+                    <label className="text-sm font-medium mb-2 block">Contract Type</label>
                     <select
-                        className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 transition-all"
-                        style={{ borderColor: COLORS.border }}
                         value={filters.dealType || ''}
                         onChange={(e) => handleFilterChange('dealType', e.target.value)}
-                        disabled={isLoading}
+                        className="w-full px-3 py-2 border rounded-md text-sm"
                     >
-                        <option value="">{isLoading ? 'Loading...' : 'All Types'}</option>
-                        {dealTypes.map(type => (
-                            <option key={type.value} value={type.value}>{type.label}</option>
+                        <option value="">All Types</option>
+                        {dealTypes.map(v => (
+                            <option key={v.value} value={v.value}>{v.label}</option>
                         ))}
                     </select>
                 </div>
 
-                {/* Status */}
                 <div>
-                    <label className="text-sm font-medium mb-2 block" style={{ color: COLORS.text.secondary }}>
-                        Status
-                    </label>
+                    <label className="text-sm font-medium mb-2 block">Status</label>
                     <select
-                        className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 transition-all"
-                        style={{ borderColor: COLORS.border }}
                         value={filters.status || ''}
                         onChange={(e) => handleFilterChange('status', e.target.value)}
-                        disabled={isLoading}
+                        className="w-full px-3 py-2 border rounded-md text-sm"
                     >
-                        <option value="">{isLoading ? 'Loading...' : 'All Statuses'}</option>
-                        {statuses.map(status => (
-                            <option key={status.value} value={status.value}>{status.label}</option>
+                        <option value="">All Status</option>
+                        {statuses.map(v => (
+                            <option key={v.value} value={v.value}>{v.label}</option>
                         ))}
                     </select>
                 </div>
 
-                {/* Branch Filter (conditionally shown) */}
-                {
-                    // branches.length > 0 ? (
-                    //     <div>
-                    //         <label className="text-sm font-medium mb-2 block" style={{ color: COLORS.text.secondary }}>
-                    //             Branch
-                    //         </label>
-                    //         <select
-                    //             className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 transition-all"
-                    //             style={{ borderColor: COLORS.border }}
-                    //             value={filters.branch || ''}
-                    //             onChange={(e) => handleFilterChange('branch', e.target.value)}
-                    //         >
-                    //             <option value="">All Branches</option>
-                    //             {branches.map(branch => (
-                    //                 <option key={branch.branchId} value={branch.branchId}>
-                    //                     {branch.branchName}
-                    //                 </option>
-                    //             ))}
-                    //         </select>
-                    //     </div>
-                    // ) : (
-                    //     /* Apply Button */
-                    // )
-                }
+                {/* Branch filter - only show if branches are provided */}
+                {branches.length > 0 && (
+                    <div>
+                        <label className="text-sm font-medium mb-2 block">Branch</label>
+                        <select
+                            value={filters.branch || ''}
+                            onChange={(e) => handleFilterChange('branch', e.target.value)}
+                            className="w-full px-3 py-2 border rounded-md text-sm"
+                        >
+                            <option value="">All Branches</option>
+                            {branches.map(b => (
+                                <option key={b.value} value={b.value}>{b.label}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
+                <div className="flex items-end">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={filters.usePoDate || false}
+                            onChange={(e) => handleFilterChange('usePoDate', e.target.checked)}
+                        />
+                        Date of PO (Opportunity)
+                    </label>
+                </div>
+
                 <div className="flex items-end">
                     <button
                         onClick={onApply}
-                        disabled={isLoading}
-                        className="w-full px-4 py-2 text-sm font-medium text-white rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full px-4 py-2 text-sm font-medium text-white rounded-md"
                         style={{ backgroundColor: COLORS.primary }}
                     >
-                        {isLoading ? 'Loading...' : 'Apply Filters'}
+                        Apply Filters
                     </button>
                 </div>
-            </div>
 
-            {/* Apply Button when branch filter is shown */}
-            {/* {branches.length > 0 && (
-                <div className="mt-4">
-                    <button
-                        onClick={onApply}
-                        disabled={isLoading}
-                        className="px-4 py-2 text-sm font-medium text-white rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{ backgroundColor: COLORS.primary }}
-                    >
-                        {isLoading ? 'Loading...' : 'Apply Filters'}
-                    </button>
-                </div>
-            )} */}
+            </div>
         </div>
     );
 }

@@ -11,7 +11,7 @@ import StackedBarChart, { formatCurrencyCompact, formatNumberCompact } from '../
 import DonutChart from '../components/charts/DonutChart';
 import AreaChart from '../components/charts/AreaChart';
 import Breadcrumb from '../components/common/BreadCrumb';
-import DataTable from '../components/common/DataTable';
+import DataTable from '../components/common/DataTable3';
 
 export default function Manager() {
     const { managerId } = useParams();
@@ -136,7 +136,6 @@ export default function Manager() {
             if (type === "warranty conversion" || type === "warranty amc conversion") return 'warrantyConversion';
             if (type === "lost amc conversion") return 'lostAmcConversion';
             if (type === "lost warranty conversion") return 'lostWarrantyConversion';
-            return 'others';
         };
 
         const revenueByVertical = () => {
@@ -182,7 +181,6 @@ export default function Manager() {
             warrantyConversion: 0,
             lostAmcConversion: 0,
             lostWarrantyConversion: 0,
-            others: 0
         }));
 
         rawData.contracts.forEach(c => {
@@ -202,7 +200,6 @@ export default function Manager() {
             warrantyConversion: 0,
             lostAmcConversion: 0,
             lostWarrantyConversion: 0,
-            others: 0
         }));
 
         rawData.contracts.forEach(c => {
@@ -241,7 +238,6 @@ export default function Manager() {
                 warrantyConversion: 0,
                 lostAmcConversion: 0,
                 lostWarrantyConversion: 0,
-                others: 0
             });
         });
 
@@ -257,7 +253,6 @@ export default function Manager() {
                 else if (type === "warranty conversion" || type === "warranty amc conversion") branch.warrantyConversion++;
                 else if (type === "lost amc conversion") branch.lostAmcConversion++;
                 else if (type === "lost warranty conversion") branch.lostWarrantyConversion++;
-                else branch.others++;
             }
         });
 
@@ -288,6 +283,29 @@ export default function Manager() {
         return result;
     }, [managerData, sortConfig]);
 
+    const sortedContracts = useMemo(() => {
+        if (!managerData) return [];
+        let result = [...managerData.rawData.contracts];
+
+        if (sortConfig.key) {
+            result.sort((a, b) => {
+                let aVal = a[sortConfig.key];
+                let bVal = b[sortConfig.key];
+
+                if (sortConfig.key === 'amount') {
+                    aVal = parseFloat(aVal || 0);
+                    bVal = parseFloat(bVal || 0);
+                }
+
+                if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+
+        return result;
+    }, [managerData, sortConfig]);
+
     const branchColumns = [
         { key: 'branchName', label: 'Branch', bold: true },
         { key: 'revenue', label: 'Revenue', align: 'right', render: v => formatCurrency(v) },
@@ -296,7 +314,16 @@ export default function Manager() {
         { key: 'warrantyConversion', label: 'Warranty Conv.', align: 'right' },
         { key: 'lostAmcConversion', label: 'Lost AMC Conv.', align: 'right' },
         { key: 'lostWarrantyConversion', label: 'Lost Warranty Conv.', align: 'right' },
-        { key: 'others', label: 'Others', align: 'right' },
+    ];
+
+    const contractColumns = [
+        { key: 'name', label: 'Contract ID', bold: true },
+        { key: 'customer_name', label: 'Customer' },
+        { key: 'branch', label: 'Branch' },
+        { key: 'date', label: 'Date' },
+        { key: 'amount', label: 'Amount', align: 'right', render: v => formatCurrency(v) },
+        { key: 'deal_type', label: 'Deal Type' },
+        { key: 'custom_contract_status', label: 'Status' },
     ];
 
     if (isLoading) {
@@ -387,7 +414,6 @@ export default function Manager() {
                                 { dataKey: 'warrantyConversion', name: 'Warranty Conversion', color: '#3b82f6' },
                                 { dataKey: 'lostAmcConversion', name: 'Lost AMC Conversion', color: '#f59e0b' },
                                 { dataKey: 'lostWarrantyConversion', name: 'Lost Warranty Conversion', color: '#ef4444' },
-                                { dataKey: 'others', name: 'Others', color: '#9ca3af' }
                             ]}
                             yAxisFormatter={formatCurrencyCompact}
                             valueFormatter={formatCurrency}
@@ -401,7 +427,6 @@ export default function Manager() {
                                 { dataKey: 'warrantyConversion', name: 'Warranty Conversion', color: '#3b82f6' },
                                 { dataKey: 'lostAmcConversion', name: 'Lost AMC Conversion', color: '#f59e0b' },
                                 { dataKey: 'lostWarrantyConversion', name: 'Lost Warranty Conversion', color: '#ef4444' },
-                                { dataKey: 'others', name: 'Others', color: '#9ca3af' }
                             ]}
                         />
 
@@ -456,6 +481,17 @@ export default function Manager() {
                         onClick: (row) => handleBranchClick(row.branchId)
                     }}
                 />
+
+                {/* Contracts Table */}
+                <div className="mt-6">
+                    <DataTable
+                        title="Contracts Overview"
+                        columns={contractColumns}
+                        data={sortedContracts}
+                        sortConfig={sortConfig}
+                        onSort={handleSort}
+                    />
+                </div>
             </div>
         </div>
     );

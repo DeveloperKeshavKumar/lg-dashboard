@@ -6,12 +6,28 @@ import { COLORS } from "../../constants/theme";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
 
+// Helper function to format date as YYYY-MM-DD without timezone issues
+function formatDateToISO(date) {
+    if (!date) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+// Helper function to parse ISO date string to Date object
+function parseISODate(dateStr) {
+    if (!dateStr) return new Date();
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day);
+}
+
 export default function DateRangeInput({ startDate, endDate, onChange }) {
     const [isOpen, setIsOpen] = useState(false);
 
     const [selectionRange, setSelectionRange] = useState({
-        startDate: startDate ? new Date(startDate) : new Date(),
-        endDate: endDate ? new Date(endDate) : new Date(),
+        startDate: startDate ? parseISODate(startDate) : new Date(),
+        endDate: endDate ? parseISODate(endDate) : new Date(),
         key: "selection",
     });
 
@@ -19,8 +35,8 @@ export default function DateRangeInput({ startDate, endDate, onChange }) {
 
     useEffect(() => {
         setSelectionRange({
-            startDate: startDate ? new Date(startDate) : new Date(),
-            endDate: endDate ? new Date(endDate) : new Date(),
+            startDate: startDate ? parseISODate(startDate) : new Date(),
+            endDate: endDate ? parseISODate(endDate) : new Date(),
             key: "selection",
         });
     }, [startDate, endDate]);
@@ -43,12 +59,8 @@ export default function DateRangeInput({ startDate, endDate, onChange }) {
 
     const handleApply = () => {
         onChange({
-            startDate: selectionRange.startDate
-                ?.toISOString()
-                .split("T")[0],
-            endDate: selectionRange.endDate
-                ?.toISOString()
-                .split("T")[0],
+            startDate: formatDateToISO(selectionRange.startDate),
+            endDate: formatDateToISO(selectionRange.endDate),
         });
         setIsOpen(false);
     };
@@ -72,12 +84,12 @@ export default function DateRangeInput({ startDate, endDate, onChange }) {
     const formatDateRange = () => {
         if (!startDate && !endDate) return "Select date range";
         if (startDate && endDate) {
-            return `${new Date(startDate).toLocaleDateString()} - ${new Date(
+            return `${parseISODate(startDate).toLocaleDateString()} - ${parseISODate(
                 endDate
             ).toLocaleDateString()}`;
         }
-        if (startDate) return `From ${new Date(startDate).toLocaleDateString()}`;
-        if (endDate) return `Until ${new Date(endDate).toLocaleDateString()}`;
+        if (startDate) return `From ${parseISODate(startDate).toLocaleDateString()}`;
+        if (endDate) return `Until ${parseISODate(endDate).toLocaleDateString()}`;
     };
 
     return (

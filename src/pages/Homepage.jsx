@@ -45,10 +45,10 @@ export default function Homepage() {
 
     const handleStackClick = (entry) => {
         const dealTypeMap = {
-            'amcRenewal': 'AMC Renewal',
-            'warrantyConversion': 'Warranty Conversion',
-            'lostAmcConversion': 'Lost AMC Conversion',
-            'lostWarrantyConversion': 'Lost Warranty Conversion'
+            amcRenewal: 'AMC Renewal',
+            warrantyConversion: 'Warranty Conversion',
+            lostAmcConversion: 'Lost AMC Conversion',
+            lostWarrantyConversion: 'Lost Warranty Conversion'
         };
 
         const dealType = dealTypeMap[entry.stackKey];
@@ -63,18 +63,25 @@ export default function Homepage() {
         setSortConfig({ key, direction });
     };
 
-    // Chart data calculations
     const chartData = useMemo(() => {
         if (!data) return null;
 
         const { rawData } = data;
 
-        // Show ALL regions in charts (parent regions, sub-regions, and standalone regions)
+        const now = new Date();
+        const startDate = new Date();
+        startDate.setMonth(now.getMonth() - 11);
+
+        const filteredContracts = rawData.contracts.filter(c => {
+            if (!c.date) return false;
+            return new Date(c.date) >= startDate;
+        });
+
         const chartRegions = data.regions;
 
         const revenueByVertical = () => {
             const map = new Map();
-            rawData.contracts.forEach(c => {
+            filteredContracts.forEach(c => {
                 const v = c.parent_vertical || 'Uncategorized';
                 map.set(v, (map.get(v) || 0) + parseFloat(c.amount || 0));
             });
@@ -83,50 +90,50 @@ export default function Homepage() {
 
         const contractTimeline = () => {
             const map = new Map();
-            rawData.contracts.forEach(c => {
-                if (c.date) {
-                    const month = c.date.substring(0, 7);
-                    const curr = map.get(month) || { count: 0, revenue: 0 };
-                    map.set(month, {
-                        count: curr.count + 1,
-                        revenue: curr.revenue + parseFloat(c.amount || 0)
-                    });
-                }
+
+            filteredContracts.forEach(c => {
+                const month = c.date.substring(0, 7);
+                const curr = map.get(month) || { count: 0, revenue: 0 };
+
+                map.set(month, {
+                    count: curr.count + 1,
+                    revenue: curr.revenue + parseFloat(c.amount || 0)
+                });
             });
-            return Array.from(map.entries())
+
+            const sorted = Array.from(map.entries())
                 .sort((a, b) => a[0].localeCompare(b[0]))
-                .map(([name, d]) => ({ name, count: d.count, revenue: d.revenue }));
+                .slice(-12);
+
+            return sorted.map(([name, d]) => ({
+                name,
+                count: d.count,
+                revenue: d.revenue
+            }));
         };
 
-        // Initialize chart data - use data already aggregated in hook
         const contractsByRegionStacked = chartRegions
-            .filter(r => !r.isParent) // Only show leaf regions in stacked charts
+            .filter(r => !r.isParent)
             .map(r => ({
                 name: r.regionName,
                 regionId: r.regionId,
                 amcRenewal: r.amcRenewal || 0,
                 warrantyConversion: r.warrantyConversion || 0,
                 lostAmcConversion: r.lostAmcConversion || 0,
-                lostWarrantyConversion: r.lostWarrantyConversion || 0,
+                lostWarrantyConversion: r.lostWarrantyConversion || 0
             }));
 
         const revenueByRegionStacked = chartRegions
-            .filter(r => !r.isParent) // Only show leaf regions in stacked charts
+            .filter(r => !r.isParent)
             .map(r => ({
                 name: r.regionName,
                 regionId: r.regionId,
                 amcRenewal: 0,
                 warrantyConversion: 0,
                 lostAmcConversion: 0,
-                lostWarrantyConversion: 0,
+                lostWarrantyConversion: 0
             }));
 
-        const REGION_HIERARCHY = {
-            'EAST': ['EAST-1', 'EAST-2'],
-            'NORTH': ['NORTH-1', 'NORTH-2']
-        };
-
-        // Helper function to categorize deal type
         const categorizeDealType = (dealType) => {
             const type = (dealType || "").toLowerCase().trim();
 
@@ -134,11 +141,10 @@ export default function Homepage() {
             if (type === "warranty conversion" || type === "warranty amc conversion") return 'warrantyConversion';
             if (type === "lost amc conversion") return 'lostAmcConversion';
             if (type === "lost warranty conversion") return 'lostWarrantyConversion';
-            return 'others';
         };
 
         // Aggregate contracts for revenue chart (only for leaf regions)
-        rawData.contracts.forEach(contract => {
+        filteredContracts.forEach(contract => {
             const region = chartRegions.find(r => r.regionId === contract.region && !r.isParent);
 
             if (region) {
@@ -181,13 +187,11 @@ export default function Homepage() {
         const result = [];
         topLevelRegions.forEach(region => {
             result.push(region);
-            // Add children if this is a parent
+
             if (region.isParent && region.subRegions) {
                 region.subRegions.forEach(subRegionId => {
                     const subRegion = data.regions.find(r => r.regionId === subRegionId);
-                    if (subRegion) {
-                        result.push(subRegion);
-                    }
+                    if (subRegion) result.push(subRegion);
                 });
             }
         });
@@ -303,7 +307,7 @@ export default function Homepage() {
 
                         <SmoothLineChart
                             data={chartData.contractTimeline}
-                            title="Contract Timeline"
+                            title="Contract Timeline (Last 12 Months)"
                             xAxisTitle="Month"
                             yAxisTitleLeft="Contracts"
                             yAxisTitleRight="Revenue"

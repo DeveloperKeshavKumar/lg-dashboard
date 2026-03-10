@@ -18,11 +18,28 @@ const REGION_HIERARCHY = {
 export function useCountryData(filters = {}) {
     // Build filter arrays
     const contractFilters = [];
+    const contractOrFilters = [];
     const quotationFilters = [['docstatus', '=', 1]];
+    const quotationOrFilters = [];
 
     if (filters.startDate && filters.endDate) {
-        contractFilters.push(['date', 'between', [filters.startDate, filters.endDate]]);
-        quotationFilters.push(['date', 'between', [filters.startDate, filters.endDate]]);
+
+        if (filters.usePoDate) {
+
+            quotationOrFilters.push(
+                ['start_date_as_per_po', 'between', [filters.startDate, filters.endDate]],
+                ['end_date_as_per_po', 'between', [filters.startDate, filters.endDate]]
+            );
+
+        } else {
+
+            contractOrFilters.push(
+                ['start_date', 'between', [filters.startDate, filters.endDate]],
+                ['expiry_date', 'between', [filters.startDate, filters.endDate]]
+            );
+
+        }
+
     }
 
     // Fetch all required data
@@ -35,7 +52,8 @@ export function useCountryData(filters = {}) {
                 'total_hp', 'currency', 'docstatus', 'industry', 'parent_vertical',
                 'deal_type', 'custom_contract_status'
             ],
-            filters: contractFilters.length > 0 ? contractFilters : undefined,
+            filters: contractFilters.length ? contractFilters : undefined,
+            orFilters: contractOrFilters.length ? contractOrFilters : undefined,
             limit: 0,
         }
     );
@@ -71,6 +89,7 @@ export function useCountryData(filters = {}) {
                 'date', 'status', 'amount', 'total_usd', 'total_hp', 'docstatus'
             ],
             filters: quotationFilters,
+            orFilters: quotationOrFilters.length ? quotationOrFilters : undefined,
             limit: 0,
         }
     );
@@ -294,10 +313,29 @@ export function useRegionData(regionId, filters = {}) {
     const orgFilters = [['region', 'in', regionFilterValue]];
     const quotationFilters = [['region', 'in', regionFilterValue], ['docstatus', '=', 1]];
 
+    const contractOrFilters = [];
+    const quotationOrFilters = [];
+
     if (filters.startDate && filters.endDate) {
-        contractFilters.push(['date', 'between', [filters.startDate, filters.endDate]]);
-        quotationFilters.push(['date', 'between', [filters.startDate, filters.endDate]]);
+
+        if (filters.usePoDate) {
+
+            quotationOrFilters.push(
+                ['start_date_as_per_po', 'between', [filters.startDate, filters.endDate]],
+                ['end_date_as_per_po', 'between', [filters.startDate, filters.endDate]]
+            );
+
+        } else {
+
+            contractOrFilters.push(
+                ['start_date', 'between', [filters.startDate, filters.endDate]],
+                ['expiry_date', 'between', [filters.startDate, filters.endDate]]
+            );
+
+        }
+
     }
+
 
     const { data: contracts, error: contractsError, isLoading: contractsLoading } = useFrappeGetDocList(
         'CRM Contract',
@@ -309,6 +347,7 @@ export function useRegionData(regionId, filters = {}) {
                 'deal_type', 'custom_contract_status'
             ],
             filters: contractFilters,
+            orFilters: contractOrFilters.length ? contractOrFilters : undefined,
             limit: 0,
         }
     );
@@ -346,6 +385,7 @@ export function useRegionData(regionId, filters = {}) {
                 'date', 'status', 'amount', 'total_usd', 'total_hp', 'docstatus'
             ],
             filters: quotationFilters,
+            orFilters: quotationOrFilters.length ? quotationOrFilters : undefined,
             limit: 0,
         }
     );
@@ -470,9 +510,21 @@ export function useBranchData(branchId, filters = {}) {
     const dealFilters = [['branch', '=', branchId]];
     const orgFilters = [['branch', '=', branchId]];
 
+    const contractOrFilters = [];
+    const quotationOrFilters = [];
+
     if (filters.startDate && filters.endDate) {
-        contractFilters.push(['date', 'between', [filters.startDate, filters.endDate]]);
-        quotationFilters.push(['date', 'between', [filters.startDate, filters.endDate]]);
+        if (filters.usePoDate) {
+            quotationOrFilters.push(
+                ['start_date_as_per_po', 'between', [filters.startDate, filters.endDate]],
+                ['end_date_as_per_po', 'between', [filters.startDate, filters.endDate]]
+            );
+        } else {
+            contractOrFilters.push(
+                ['start_date', 'between', [filters.startDate, filters.endDate]],
+                ['expiry_date', 'between', [filters.startDate, filters.endDate]]
+            );
+        }
     }
 
     const { data: branchInfo, error: branchInfoError, isLoading: branchInfoLoading } =
@@ -490,6 +542,7 @@ export function useBranchData(branchId, filters = {}) {
                 'industry', 'parent_vertical', 'deal_type', 'owner', 'custom_contract_status'
             ],
             filters: contractFilters,
+            orFilters: contractOrFilters.length ? contractOrFilters : undefined,
             limit: 0
         });
 
@@ -521,6 +574,7 @@ export function useBranchData(branchId, filters = {}) {
                 'date', 'status', 'amount', 'total_hp', 'docstatus', 'owner'
             ],
             filters: quotationFilters,
+            orFilters: quotationOrFilters.length ? quotationOrFilters : undefined,
             limit: 0
         });
 
